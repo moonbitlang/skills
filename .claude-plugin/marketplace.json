@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-code-plugins",
+  "version": "1.0.0",
+  "description": "Bundled plugins for Claude Code, Codex, OpenCode for MoonBit projects development",
+  "owner": {
+    "name": "MoonBit"
+  },
+  "plugins": [
+    {
+      "name": "moonbit-agent-guide",
+      "description": "Guide for writing, refactoring, and testing MoonBit projects. Use when working in MoonBit modules or packages, organizing MoonBit files, using moon tooling (build/check/test/doc/ide), or following MoonBit-specific layout, documentation, and testing conventions.",
+      "source": "./moonbit-agent-guide",
+      "category": "development"
+    }
+  ]
+}
