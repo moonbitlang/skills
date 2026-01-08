@@ -10,32 +10,29 @@
     {
       "name": "moonbit-agent-guide",
       "description": "Guide for writing, refactoring, and testing MoonBit projects.",
-      "source": "./moonbit-agent-guide",
+      "source": {
+        "source": "github",
+        "repo": "moonbitlang/moonbit-agent-guide"
+      },
       "category": "development"
     },
     {
       "name": "moonbit-spec-test-development",
       "description": "Create formal spec-driven MoonBit APIs and test suites.",
-      "source": "./moonbit-spec-test-development",
+      "source": {
+        "source": "github",
+        "repo": "bobzhang/moonbit-spec-test-development"
+      },
       "category": "development"
     },
     {
       "name": "moonbit-lang",
       "description": "MoonBit language reference and coding conventions.",
-      "source": "./moonbit-lang",
-      "category": "development"
-    },
-    {
-      "name": "moonbit-extract-spec-test",
-      "description": "Extract formal spec and comprehensive test suites from existing MoonBit implementations.",
       "source": {
         "source": "github",
-        "repo": "moonbitlang/spec-tests"
+        "repo": "Milky2018/moonbit-lang-skill"
       },
-      "strict": false,
-      "skills": [
-        "./.moonagent/skills/moonbit-extract-spec-test"
-      ]
+      "category": "development"
     }
   ]
 }

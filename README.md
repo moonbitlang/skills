@@ -10,7 +10,7 @@ Run `/plugin` in the CLI, and select `Add Marketplace`. Input `moonbitlang/skill
 
 ### Codex 
 
-Run in the CLI: `$skill-installer install <skill-name> by submodule from https://github.com/moonbitlang/skills.git`
+Run in the CLI: `$skill-installer install <skill-name> by .claude-plugin/marketplace.json from https://github.com/moonbitlang/skills.git`
 
 ## License 
 
