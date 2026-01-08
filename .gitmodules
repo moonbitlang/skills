@@ -12,3 +12,8 @@
 	path = moonbit-lang
 	url = https://github.com/Milky2018/moonbit-lang-skill.git
 	branch = main
+
+[submodule "moonbit-extract-spec-test"]
+	path = moonbit-extract-spec-test
+	url = https://github.com/moonbitlang/spec-tests.git
+	branch = main 

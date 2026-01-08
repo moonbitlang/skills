@@ -24,6 +24,12 @@
       "description": "MoonBit language reference and coding conventions.",
       "source": "./moonbit-lang",
       "category": "development"
+    },
+    {
+      "name": "moonbit-extract-spec-test",
+      "description": "Extract formal spec and comprehensive test suites from existing MoonBit implementations.",
+      "source": "./moonbit-extract-spec-test/.moonagent/skills/moonbit-extract-spec-test",
+      "category": "development"
     }
   ]
 }
