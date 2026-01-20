@@ -10,7 +10,13 @@
     {
       "name": "moonbit-agent-guide",
       "description": "Guide for writing, refactoring, and testing MoonBit projects.",
-      "source": "./moonbit-agent-guide",
+      "source": "./moonbit-agent-guide/moonbit-agent-guide",
+      "category": "development"
+    },
+    {
+      "name": "moonbit-refactoring",
+      "description": "Refactor MoonBit code to be idiomatic.",
+      "source": "./moonbit-agent-guide/moonbit-refactoring",
       "category": "development"
     },
     {
