@@ -35,10 +35,7 @@
       "name": "moonbit-extract-spec-test",
       "description": "Extract formal spec and comprehensive test suites from existing MoonBit implementations.",
       "source": "./moonbit-extract-spec-test",
-      "strict": false,
-      "skills": [
-        "./.moonagent/skills/moonbit-extract-spec-test"
-      ]
+      "strict": false
     },
     {
       "name": "moonbit-c-binding",
