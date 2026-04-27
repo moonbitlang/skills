@@ -1,46 +1,18 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "moonbit-code-plugins",
-  "version": "1.0.0",
-  "description": "Bundled plugins for Claude Code, Codex, OpenCode for MoonBit projects development",
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Bundled plugins for Claude Code, Codex, OpenCode for MoonBit projects development"
+  },
   "owner": {
     "name": "MoonBit"
   },
   "plugins": [
     {
-      "name": "moonbit-agent-guide",
-      "description": "Guide for writing, refactoring, and testing MoonBit projects.",
-      "source": "./moonbit-agent-guide/moonbit-agent-guide",
-      "category": "development"
-    },
-    {
-      "name": "moonbit-refactoring",
-      "description": "Refactor MoonBit code to be idiomatic.",
-      "source": "./moonbit-agent-guide/moonbit-refactoring",
-      "category": "development"
-    },
-    {
-      "name": "moonbit-spec-test-development",
-      "description": "Create formal spec-driven MoonBit APIs and test suites.",
-      "source": "./moonbit-spec-test-development",
-      "category": "development"
-    },
-    {
-      "name": "moonbit-lang",
-      "description": "MoonBit language reference and coding conventions.",
-      "source": "./moonbit-lang",
-      "category": "development"
-    },
-    {
-      "name": "moonbit-extract-spec-test",
-      "description": "Extract formal spec and comprehensive test suites from existing MoonBit implementations.",
-      "source": "./moonbit-extract-spec-test",
-      "strict": false
-    },
-    {
-      "name": "moonbit-c-binding",
-      "description": "Write MoonBit bindings for existing C libraries using native FFI, with ownership annotations, C stubs, and ASan validation.",
-      "source": "./moonbit-c-binding",
+      "name": "moonbit-skills",
+      "description": "Bundled MoonBit development skills for Claude Code, Codex, OpenCode, and other agents.",
+      "source": "./",
       "category": "development"
     }
   ]

@@ -1,14 +1,14 @@
 [submodule "moonbit-agent-guide"]
-	path = moonbit-agent-guide
+	path = vendor/moonbit-agent-guide
 	url = https://github.com/moonbitlang/moonbit-agent-guide.git
 	branch = main
 
 [submodule "moonbit-spec-test-development"]
-	path = moonbit-spec-test-development
+	path = skills/moonbit-spec-test-development
 	url = https://github.com/bobzhang/moonbit-spec-test-development.git
 	branch = main
 
 [submodule "moonbit-lang"]
-	path = moonbit-lang
+	path = skills/moonbit-lang
 	url = https://github.com/Milky2018/moonbit-lang-skill.git
 	branch = main

@@ -1,0 +1,8 @@
+{
+  "name": "moonbit-skills",
+  "description": "Bundled MoonBit development skills for Claude Code, Codex, OpenCode, and other agents.",
+  "author": {
+    "name": "MoonBit"
+  },
+  "repository": "https://github.com/moonbitlang/skills"
+}
