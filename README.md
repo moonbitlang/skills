@@ -19,7 +19,7 @@ If you already cloned the repository without submodules, initialize them afterwa
 git submodule update --init --recursive
 ```
 
-Each skill lives in its own directory. Use the local paths from `.claude-plugin/marketplace.json` when installing or linking skills into your agent environment.
+Each skill lives in its own directory under `skills/`.
 
 ### General agents
 
@@ -32,6 +32,8 @@ install the skills listed in this repo: https://raw.githubusercontent.com/moonbi
 ### Claude Code
 
 Run `/plugin` in the CLI, and select `Add Marketplace`. Input `moonbitlang/skills` to add this marketplace.
+
+Then install the `moonbit-skills` plugin from the marketplace. The plugin exposes the bundled skills from the `skills/` directory.
 
 ### Codex
 
