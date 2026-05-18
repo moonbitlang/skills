@@ -1,0 +1,27 @@
+{
+  "moonbit-agent-guide": {
+    "repo": "https://github.com/moonbitlang/moonbit-agent-guide.git",
+    "ref": "main",
+    "path": "moonbit-agent-guide"
+  },
+  "moonbit-proof": {
+    "repo": "https://github.com/moonbitlang/moonbit-agent-guide.git",
+    "ref": "main",
+    "path": "moonbit-proof"
+  },
+  "moonbit-refactoring": {
+    "repo": "https://github.com/moonbitlang/moonbit-agent-guide.git",
+    "ref": "main",
+    "path": "moonbit-refactoring"
+  },
+  "moonbit-spec-test-development": {
+    "repo": "https://github.com/bobzhang/moonbit-spec-test-development.git",
+    "ref": "main",
+    "path": "."
+  },
+  "ocaml2moonbit-migration": {
+    "repo": "https://github.com/moonbitlang/moonbit-agent-guide.git",
+    "ref": "main",
+    "path": "ocaml2moonbit-migration"
+  }
+}
