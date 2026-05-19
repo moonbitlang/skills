@@ -4,6 +4,11 @@
     "ref": "main",
     "path": "moonbit-agent-guide"
   },
+  "moonbit-c-binding": {
+    "repo": "https://github.com/moonbitlang/moonbit-agent-guide.git",
+    "ref": "main",
+    "path": "moonbit-c-binding"
+  },
   "moonbit-proof": {
     "repo": "https://github.com/moonbitlang/moonbit-agent-guide.git",
     "ref": "main",
