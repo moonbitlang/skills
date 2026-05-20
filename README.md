@@ -4,42 +4,70 @@ Agent Skills are folders of instructions, scripts, and resources that AI agents 
 
 ## Installing
 
-### Git clone
-
-Clone the repository with submodules so every bundled skill is available locally:
+Install all skills for every supported agent:
 
 ```sh
-git clone --recurse-submodules https://github.com/moonbitlang/skills.git
-cd skills
+npx skills@latest add moonbitlang/skills -g --all --copy
 ```
 
-If you already cloned the repository without submodules, initialize them afterward:
+Install all skills for Codex with the `skills` CLI:
 
 ```sh
-git submodule update --init --recursive
+npx skills@latest add moonbitlang/skills -g --agent codex --skill "*" --copy -y
+```
+
+Install all skills for Claude Code:
+
+```sh
+npx skills@latest add moonbitlang/skills -g --agent claude-code --skill "*" --copy -y
+```
+
+List the skills available in this repository:
+
+```sh
+npx skills@latest add moonbitlang/skills --list
+```
+
+Install one skill by name:
+
+```sh
+npx skills@latest add moonbitlang/skills -g --agent codex --skill moonbit-orientation --copy -y
 ```
 
 Each skill lives in its own directory under `skills/`.
 
-### General agents
+### Local copy
 
-For agents that can install skills from natural language prompts, such as Codex, Claude, Gemini CLI, OpenCode, and similar tools, ask the agent to install the skills listed in this repository:
+If you do not want to use `npx`, clone the repository and copy the skill directories manually:
 
-```text
-install the skills listed in this repo: https://raw.githubusercontent.com/moonbitlang/skills/refs/heads/master/.claude-plugin/marketplace.json
+```sh
+git clone https://github.com/moonbitlang/skills.git
+cd skills
+mkdir -p ~/.agents/skills
+
+for skill in skills/*; do
+  [ -f "$skill/SKILL.md" ] || continue
+  rsync -a --delete "$skill/" "$HOME/.agents/skills/$(basename "$skill")/"
+done
 ```
 
-### Claude Code
+## Maintaining vendored skills
 
-Run `/plugin` in the CLI, and select `Add Marketplace`. Input `moonbitlang/skills` to add this marketplace.
+Installable skills are committed as regular directories under `skills/`. Do not
+use submodules or symlinks for installable skill entries; `npx skills` expects
+to find real `skills/<name>/SKILL.md` files after a normal clone.
 
-Then install the `moonbit-skills` plugin from the marketplace. The plugin exposes the bundled skills from the `skills/` directory.
+Some skills are vendored from upstream repositories. Their sources are listed in
+`skills.sources.json`. To refresh them:
 
-### Codex
+```sh
+./scripts/sync-upstream-skills.py
+npx skills@latest add . --list
+git diff
+```
 
-Run in the CLI: `$skill-installer install <skill-name> by submodule from https://github.com/moonbitlang/skills.git`
-
-Or, run `$skill-installer install all skills listed in https://raw.githubusercontent.com/moonbitlang/skills/refs/heads/master/.claude-plugin/marketplace.json` to install all skills in this repo.
+The same sync path also runs weekly in GitHub Actions and opens a pull request
+when upstream skill contents change.
 
 ## License
 

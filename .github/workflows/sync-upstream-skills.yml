@@ -1,0 +1,77 @@
+name: Sync upstream skills
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 1 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync vendored skills
+        run: ./scripts/sync-upstream-skills.py
+
+      - name: Validate synced skills
+        run: |
+          python3 -m json.tool skills.sources.json >/dev/null
+          python3 -m py_compile scripts/sync-upstream-skills.py
+          npx skills@latest add . --list
+          git diff --check
+          rm -rf scripts/__pycache__ .agents skills-lock.json
+
+      - name: Create pull request
+        env:
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo "No upstream skill changes detected."
+            exit 0
+          fi
+
+          branch="automation/sync-upstream-skills"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A
+          git commit -m "Sync upstream MoonBit skills"
+          git push --force-with-lease origin "$branch"
+
+          body_file="$(mktemp)"
+          cat >"$body_file" <<'BODY'
+          ## Summary
+          - sync vendored MoonBit skills from upstream repositories
+          - refresh committed skill directories generated from `skills.sources.json`
+
+          ## Validation
+          - python3 -m json.tool skills.sources.json
+          - python3 -m py_compile scripts/sync-upstream-skills.py
+          - npx skills@latest add . --list
+          - git diff --check
+          BODY
+
+          if gh pr view "$branch" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh pr edit "$branch" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Sync upstream MoonBit skills" \
+              --body-file "$body_file"
+          else
+            gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$BASE_BRANCH" \
+              --head "$branch" \
+              --title "Sync upstream MoonBit skills" \
+              --body-file "$body_file"
+          fi
