@@ -66,6 +66,9 @@ npx skills@latest add . --list
 git diff
 ```
 
+The same sync path also runs weekly in GitHub Actions and opens a pull request
+when upstream skill contents change.
+
 ## License
 
 The license of an individual skill can be found directly inside the skill's directory inside the LICENSE.txt file.
