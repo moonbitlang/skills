@@ -1,0 +1,12 @@
+options(
+  "native-stub": [
+    "wrapper.c",
+    # BEGIN managed-native-stub
+    # END managed-native-stub
+  ],
+  targets: {
+    "ffi.mbt": [ "native" ],
+    "api.mbt": [ "native" ],
+    "README.mbt.md": [ "native" ],
+  },
+)

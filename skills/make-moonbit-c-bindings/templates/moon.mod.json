@@ -1,0 +1,7 @@
+{
+  "name": "username/library_mbt",
+  "version": "0.1.0",
+  "preferred-target": "native",
+  "supported-targets": "native",
+  "source": "src"
+}
