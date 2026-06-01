@@ -46,11 +46,11 @@ test "everything is expression in MoonBit" {
     }
     MyNone => 0
   }
-  let status : Result[Int, String] = Ok(10)
+  let status = MySome(10)
   // match expressions return values
   let description = match status {
-    Ok(value) => "Success: \{value}"
-    Err(error) => "Error: \{error}"
+    MySome(value) => "Success: \{value}"
+    MyNone => "No value"
   }
   let array = [1, 2, 3, 4, 5]
   let mut i = 0 // mutable bindings (local only, globals are immutable)
@@ -104,9 +104,9 @@ pub(all) struct Point {
 } derive(Show, ToJson)
 
 ///|
-pub enum MyResult[T, E] {
-  MyOk(T) // semicolon `;` is optional when we have a newline
-  MyErr(E) // Enum variants must start uppercase
+pub enum LoadState {
+  Loading // semicolon `;` is optional when we have a newline
+  Ready(Int) // Enum variants must start uppercase
 } derive(Show, Eq, ToJson)
 // pub means it can only be pattern matched outside the package
 // but it can not be created outside the package, use `pub(all)` otherwise

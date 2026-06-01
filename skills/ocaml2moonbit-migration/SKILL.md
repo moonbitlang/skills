@@ -183,7 +183,7 @@ moon run -c 'fn main { println((-8) >> 1); println(1 << 32); println(1 >> 32); l
 `Int` right shift is arithmetic, and shift counts are **masked to 5 bits**, so `1 << 32 == 1`. For OCaml `Int32.shift_right_logical`, reinterpret signed→unsigned, shift, reinterpret back. Numeric conversion (`.to_uint()`) is **not** the same as bit reinterpretation (`.reinterpret_as_uint()`).
 
 ```sh
-moon run -c $'fn main { let parsed : Result[Int, Error] = try? @string.parse_int("2147483648"); println(parsed is Err(_)); let mut value = 0; for digit in [50,49,52,55,52,56,51,54,52,56] { value = value * 10 + digit - 48 }; println(value); let mut wide = 0L; for digit in [50,49,52,55,52,56,51,54,52,56] { wide = wide * 10L + (digit - 48).to_int64() }; println(wide.to_string()) }'
+moon run -c $'fn main { try @string.parse_int("2147483648") catch { _ => println(true) } noraise { _ => println(false) }; let mut value = 0; for digit in [50,49,52,55,52,56,51,54,52,56] { value = value * 10 + digit - 48 }; println(value); let mut wide = 0L; for digit in [50,49,52,55,52,56,51,54,52,56] { wide = wide * 10L + (digit - 48).to_int64() }; println(wide.to_string()) }'
 # true
 # -2147483648
 # 2147483648
@@ -372,7 +372,7 @@ Define a project-level `suberror` once the first fallible functions are ported. 
 When a raising function returns another function, parenthesize the function type before `raise`: `-> ((A) -> B) raise E`, **not** `-> (A) -> B raise E` (the latter binds `raise` to the returned function type).
 
 ```sh
-moon run -c $'fn may_fail(flag : Bool) -> Unit raise { if flag { fail("boom") } }\nfn main { let result : Result[Unit, Error] = try? may_fail(true); println((result is Err(_)).to_string()) }'
+moon run -c $'fn may_fail(flag : Bool) -> Unit raise { if flag { fail("boom") } }\nfn main { try may_fail(true) catch { _ => println(true) } noraise { _ => println(false) } }'
 # true
 ```
 
@@ -381,11 +381,11 @@ moon run -c $'fn parse(s : String) -> Int raise { @string.parse_int(s) }\nfn mai
 # 7
 ```
 
-`try? expr` materializes failure as `Result[T, Error]` — convenient in tests, but loses the narrower suberror type for re-raising. `try expr catch { ... } noraise { value => ... }` is the OCaml `try ... with ...` analogue with explicit success and error branches.
+`try expr catch { ... } noraise { value => ... }` is the OCaml `try ... with ...` analogue with explicit success and error branches. When only propagating an error, call the fallible function directly from a `raise` context.
 
-To catch one constructor and propagate the rest while keeping the project error type, use `expr catch { SpecificError => fallback; error => raise error }`. `catch` arms are checked for exhaustiveness; do not omit the final propagating arm. When porting OCaml exception tests, default to `Err(_)`; match a specific variant only when that variant is itself the contract under test.
+To catch one constructor and propagate the rest while keeping the project error type, use `expr catch { SpecificError => fallback; error => raise error }`. `catch` arms are checked for exhaustiveness; do not omit the final propagating arm. When porting OCaml exception tests, use a wildcard `catch` arm for "this should raise"; match a specific variant only when that variant is itself the contract under test.
 
-Avoid `match (try? f()) { Ok(...) => ...; Err(...) => ... }` — MoonBit warns on it. Prefer `try f() catch { ... } noraise { ... }`. If you must match a `try?` result, wrap it in parentheses; `match try? expr { ... }` is invalid syntax.
+Do not convert checked errors into generic success/failure values for control flow. Prefer `try f() catch { ... } noraise { ... }` when both branches matter, or a plain call from a `raise` context when the error should propagate.
 
 ## Functions and Callbacks
 
@@ -423,7 +423,7 @@ fn main raise { println(apply(fn(x) raise { if x == 0 { fail("zero") }; x + 1 },
 Raising callbacks must include `raise` in the parameter type and in the literal: `(Int) -> Int raise` and `fn(x) raise { ... }`. Inferred raising effects on `fn` literals are deprecated. For a narrower project error type, annotate: `fn(x) raise ProjectError { ... }`.
 
 ```sh
-moon run -c $'fn apply(f : (Int) -> Int raise Error) -> Int raise Error { f(1) }\nfn main { let result : Result[Int, Error] = try? apply(fn(x) raise Error { if x > 0 { fail("x") } else { x } }); println(result is Err(_)) }'
+moon run -c $'fn apply(f : (Int) -> Int raise Error) -> Int raise Error { f(1) }\nfn main { try apply(fn(x) raise Error { if x > 0 { fail("x") } else { x } }) catch { _ => println(true) } noraise { _ => println(false) } }'
 # true
 ```
 
@@ -570,6 +570,7 @@ MoonBit async has no `await` keyword — async functions call other async functi
 - Make filesystem/network entry points async when they touch `moonbitlang/async`.
 - Prefer async wrappers that load file contents into `Bytes`, then call the synchronous core. This avoids making every recursive helper async.
 - Async entry points and async tests need `moonbitlang/async` in the relevant `moon.pkg`; syntax alone is not enough.
+- Async functions can raise by default. Do not add `raise` to async functions just to propagate errors; add `noraise` only when the async function must reject unhandled errors.
 
 ```sh
 moon run --target native -c 'async fn main { println("async ok") }'
@@ -577,7 +578,7 @@ moon run --target native -c 'async fn main { println("async ok") }'
 ```
 
 ```sh
-moon run --target native -c $'import {\n  "moonbitlang/async",\n  "moonbitlang/async/fs" @fs,\n}\nasync fn main {\n  let result = try? @fs.read_file("/tmp/definitely-missing-fixture")\n  println(result is Err(_))\n}'
+moon run --target native -c $'import {\n  "moonbitlang/async",\n  "moonbitlang/async/fs" @fs,\n}\nasync fn main {\n  try @fs.read_file("/tmp/definitely-missing-fixture") catch {\n    _ => println(true)\n  } noraise {\n    _ => println(false)\n  }\n}'
 # true
 ```
 
@@ -599,8 +600,8 @@ Assertion style:
 - Shared test helpers that call `@test.assert_eq`, `fail`, or fallible APIs should declare `-> Unit raise Error` unless they use a narrower project error type.
 - Pattern checks: `assert_true(value is Pattern(...))` or `guard ... else { fail(...) }`.
 - Snapshots: `inspect(value, content="...")` for small values; `debug_inspect(value, content=...)` for complex values with `Debug`. If the expected snapshot is unknown, write `inspect(value)`, run `moon test --update`, then review the diff.
-- Success paths through raising functions: call the fallible API directly and let the test fail on any error. Expected failures: `let result : Result[T, Error] = try? f()` and assert or inspect the result.
-- Use `Err(_)` for "this should raise"; match a specific error variant only when that variant is itself part of the compatibility contract.
+- Success paths through raising functions: call the fallible API directly and let the test fail on any error. Expected failures: `try f() catch { err => inspect(err) } noraise { _ => fail("expected to fail") }`.
+- Use a wildcard `catch` arm for "this should raise"; match a specific error variant only when that variant is itself part of the compatibility contract.
 
 ```sh
 moon run -c 'fn helper() -> Unit raise Error { @test.assert_eq(true, true); @test.assert_eq([1, 2], [1, 2]) }

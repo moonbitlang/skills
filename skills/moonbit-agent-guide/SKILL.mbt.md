@@ -11,7 +11,7 @@ For fast, reliable task execution, follow this order:
    - Confirm expected behavior, non-goals, and compatibility constraints (target backend, public API stability, performance limits).
 
 2. **Locate module/package boundaries**
-   - Find `moon.mod.json` (module root) and relevant `moon.pkg` files (package boundaries and imports).
+   - Find `moon.mod` (module root) and relevant `moon.pkg` files (package boundaries and imports).
 
 3. **Discover APIs before coding**
    - Prefer `moon ide doc` queries to discover existing functions/types/methods before adding new code.
@@ -79,16 +79,19 @@ Use the smallest playbook that matches the request.
 # MoonBit Project Layouts
 
 MoonBit uses the `.mbt` extension for source code files and interface files with the `.mbti` extension. At
-the top-level of a MoonBit project there is a `moon.mod.json` file specifying
+the top-level of a MoonBit project there is a `moon.mod` file specifying
 the metadata of the project. The project may contain multiple packages, each
-with its own `moon.pkg`. Subdirectories may also contain `moon.mod.json`
+with its own `moon.pkg`. Subdirectories may also contain `moon.mod`
 files indicating that a different set of dependencies can be used for that subdir.
+Legacy projects may still contain `moon.mod.json`; treat it as the old module
+metadata format and migrate/update guidance to `moon.mod` instead of creating
+new `moon.mod.json` files.
 
 ## Example layout
 
 ```
 my_module
-├── moon.mod.json             # Module metadata, source field (optional) specifies the source directory of the module
+├── moon.mod                  # Module metadata; source option can specify the source directory
 ├── moon.pkg             # Package metadata (each directory is a package like Golang)
 ├── README.mbt.md             # Markdown with tested code blocks (`test "..." { ... }`)
 ├── README.md -> README.mbt.md
@@ -106,18 +109,18 @@ my_module
 └── ...                       # More package files, symbols visible to current package (like Golang)
 ```
 
-- **Module**: characterized by a `moon.mod.json` file in the project root directory.
+- **Module**: characterized by a `moon.mod` file in the project root directory.
   A MoonBit *module* is like a Go module; it is a collection of packages in subdirectories, usually corresponding to a repository or project.
   Module boundaries matter for dependency management and import paths.
 
 - **Package**: characterized by a `moon.pkg` file in each directory.
   All subcommands of `moon` will
-  still be executed in the directory of the module (where `moon.mod.json` is
+  still be executed in the directory of the module (where `moon.mod` is
   located), not the current package.
   A MoonBit *package* is the actual compilation unit (like a Go package).
   All source files in the same package are concatenated into one unit and
   thereby share all definitions throughout that package.
-  The `name` in the `moon.mod.json` file combined with the relative path to
+  The `name` in the `moon.mod` file combined with the relative path to
   the package source directory defines the package name, not the file name.
   Imports refer to module + package paths, NEVER to file names.
 
@@ -166,16 +169,19 @@ my_module
 
 - **Don't use uppercase for variables/functions** - compilation error
 - **Don't forget `mut` for mutable record fields** - immutable by default (note that Arrays typically do NOT need `mut` unless completely reassigning to the variable - simple push operations, for example, do not need `mut`)
-- **Don't ignore error handling** - errors must be explicitly handled
+- **Don't ignore error handling** - either handle errors explicitly, or declare `raise` on the caller and let checked errors propagate
 - **Don't use `return` unnecessarily** - the last expression is the return value
 - **Don't create methods without Type:: prefix** - methods need explicit type prefix
 - **Don't forget to handle array bounds** - use `get()` for safe access
 - **Don't forget @package prefix when calling functions from other packages**
 - **Don't use ++ or -- (not supported)** - use `i = i + 1` or `i += 1`
-- **Don't add explicit `try` for error-raising functions** - errors propagate automatically (unlike Swift)
-- **Legacy syntax**: Legacy code may use `function_name!(...)` or `function_name(...)?` - these are deprecated, use normal calls.
+- **Don't add explicit `try` for error propagation** - inside a `raise` function, call error-raising functions normally; use `catch` to handle locally and `try!` only when aborting is intended
+- **Legacy syntax**: Legacy code may use `function_name!(...)` or `function_name(...)?` - these are deprecated; use normal calls for propagation.
+- **Don't write an empty parameter list for `main`** - use `fn main { ... }` or `fn main raise { ... }`, not `fn main() { ... }` or `fn main() raise ... { ... }`
+- **Don't write record-style enum or error constructor fields** - labeled constructor fields use `label~ : Type`, e.g. `InvalidNumber(input~ : String)`, not `InvalidNumber(input: String)`
 - **Prefer range `for` loops over C-style** - `for i in 0..<(n-1) {...}` and `for j in 0..=6 {...}` are more idiomatic in MoonBit
-- **Async** - MoonBit has no `await` keyword; do not add it. Async functions and tests are characterized by those which call other async functions.
+- **Async** - MoonBit has no `await` keyword; do not add it. Async functions default to raising, so do not add `raise`; add `noraise` only when the async body must not raise.
+  Async functions and tests are characterized by those which call other async functions.
   To identify a function or test as async, simply add the `async` prefix (e.g. `[pub] async fn ...`, `async test ...`).
 
 # `moon` Essentials
@@ -291,7 +297,8 @@ Use snapshot tests as it is easy to update when behavior changes.
 - Black-box by default: Call only public APIs via `@package.fn`. Use white-box tests only when private members matter.
 - Grouping: Combine related checks in one `test "..." { ... }` block for speed and clarity.
 - Panics: Name tests with prefix `test "panic ..." {...}`; if the call returns a value, wrap it with `ignore(...)` to silence warnings.
-- Errors: Use `try? f()` to get `Result[...]` and `inspect` it when a function may raise.
+- Errors: For expected success, call error-raising functions directly. If a call unexpectedly raises, the test fails with the actual error. For expected failure, use `try ... catch ... noraise`, inspect the error in `catch`, and fail explicitly in `noraise`.
+  Default expected-failure shape: `try f() catch { err => inspect(err) } noraise { _ => fail("expected to fail") }`.
 
 ### Docstring tests
 
@@ -554,28 +561,33 @@ moon update                   # Update package index
 
 ### Browsing Third-Party Source (`moon fetch`)
 
-`moon fetch <author>/<module>[@<version>]` downloads a package's source into `.repos/<author>/<module>/<version>/` for offline reading (examples, internals, generated `.mbti`). It does NOT add the package to `moon.mod.json` — use `moon add` for that. Add `.repos/` to `.gitignore`.
+`moon fetch <author>/<module>[@<version>]` downloads a package's source into `.repos/<author>/<module>/<version>/` for offline reading (examples, internals, generated `.mbti`). It does NOT add the package to `moon.mod` — use `moon add` for that. Add `.repos/` to `.gitignore`.
 
 ```sh
 moon fetch moonbitlang/async@0.18.1   # browse source/examples without taking a dependency
 ```
 
-### Typical Module configurations (`moon.mod.json`)
-
-```json
-{
-  "name": "username/hello", // Required format for published modules
-  "version": "0.1.0",
-  "source": ".", // Source directory(optional, default: ".")
-  "repository": "", // Git repository URL
-  "keywords": [], // Search keywords
-  "description": "...", // Module description
-  "deps": {
-    // Dependencies from mooncakes.io, using`moon add` to add dependencies
-    "moonbitlang/x": "0.4.6"
-  }
-}
+### Typical Module configurations (`moon.mod`)
 ```
+name = "username/hello"
+version = "0.1.0"
+readme = "README.mbt.md"
+repository = ""
+license = "Apache-2.0"
+keywords = []
+description = "..."
+
+import {
+  "moonbitlang/x@0.4.6",
+}
+
+options(
+  // source: "src", // Optional; default is "."
+  "preferred-target": "native",
+)
+```
+
+Use `moon add moonbitlang/x@0.4.6` and `moon remove moonbitlang/x` to manage the `import` block instead of editing dependency versions by hand.
 
 ### Typical Package configuration (`moon.pkg`)
 
@@ -583,11 +595,26 @@ moon.pkg for simplicity
 ```
 import {
   "username/hello/liba",
-  "moonbitlang/x/encoding" @libb
+  "moonbitlang/x/encoding" @libb,
 }
-import {...} for "test"
-import {...} for "wbtest"
-options("is-main" : true) // other options
+import {
+  "username/hello/test_helpers",
+} for "test"
+import {
+  "username/hello/internal_test_helpers",
+} for "wbtest"
+options(
+  "is-main": true,
+)
+```
+
+Use `supported_targets = "native"` or another target-set expression at top level when the whole package only supports selected backends.
+
+```
+supported_targets = "native"
+options(
+  "is-main": true,
+)
 ```
 
 Packages are per directory and packages without a `moon.pkg` file are not recognized.
@@ -619,8 +646,7 @@ fn main {
 
 ### Using the Standard Library (moonbitlang/core)
 
-**MoonBit standard library (moonbitlang/core) packages were automatically imported**. MoonBit is transitioning to explicit imports—you will see a warning to add imports like `moonbitlang/core/strconv` to `moon.pkg` if you use them.
-The module is always available without adding to dependencies.
+The `moonbitlang/core` module is always available without adding it to `moon.mod` dependencies. Ordinary core packages still need explicit `moon.pkg` imports for package aliases such as `@utf8`, `@json`, or `@strconv`; add imports like `"moonbitlang/core/encoding/utf8"` when the compiler reports a missing or implicit core package.
 
 
 ### Creating Packages
@@ -634,7 +660,7 @@ To add a new package `fib` under `.`:
 
    ```
      import {
-      "username/hello/fib",
+       "username/hello/fib",
      }
    ```
 
@@ -647,12 +673,15 @@ Asynchronous programming uses compiler support plus the `moonbitlang/async` runt
 User-facing subpackages: `@async` (core: tasks, timers, cancellation), `@async/aqueue`, `@async/fs, `@async/stdio`, `@async/websocket`, ..etc.
 Each must be imported separately in `moon.pkg`.
 
-1. Add the dependency and pin the native target in `moon.mod.json`:
-   ```json
-   {
-     "deps": { "moonbitlang/async": "0.18.1" },
-     "preferred-target": "native"
+1. Add the dependency and pin the native target in `moon.mod`:
+   ```
+   import {
+     "moonbitlang/async@0.18.1",
    }
+
+   options(
+     "preferred-target": "native",
+   )
    ```
 2. In the executable's `moon.pkg`, set `is-main`, restrict to native, and import what you need:
    ```
@@ -660,8 +689,10 @@ Each must be imported separately in `moon.pkg`.
      "moonbitlang/async",
      "moonbitlang/async/stdio",
    }
-   supported_targets = "+native"
-   options("is-main": true)
+   supported_targets = "native"
+   options(
+     "is-main": true,
+   )
    ```
 3. Define `async fn main` (not `fn main`). Spawn concurrent tasks via `with_task_group` for structured concurrency:
    ```mbt nocheck
@@ -679,6 +710,9 @@ Each must be imported separately in `moon.pkg`.
      })
    }
    ```
+
+- Async functions have a raising effect by default. Write `async fn main { ... }` or `async fn f(...) { ... }`, not `async fn main raise { ... }`.
+- Use `async fn f(...) noraise { ... }` only when the async body must not raise. A `noraise` async function cannot call fallible APIs unless it handles their errors locally.
 
 **Structured-concurrency contract for `with_task_group`:**
 
@@ -713,8 +747,9 @@ async test "sleep completes" {
 ```
 
 - There is no `await` keyword (similar to functions that raise errors). Inside an `async test`, call async functions normally.
+- `async test` also has the async raising effect by default; do not add `raise`.
 - Async tests run in parallel by default. Avoid shared ports, files, environment variables, and global mutable state unless each test isolates its resources.
-- Run with `moon test --target native` unless `moon.mod.json` sets `"preferred-target": "native"`. Use `moon test -v` when checking test names or async scheduling behavior.
+- Run with `moon test --target native` unless `moon.mod` sets `"preferred-target": "native"`. Use `moon test -v` when checking test names or async scheduling behavior.
 - In `README.mbt.md` and docstrings, `mbt check` blocks may contain `async test` blocks; make sure the package imports `moonbitlang/async` for the relevant test mode.
 
 # MoonBit Language Tour
@@ -735,10 +770,17 @@ async test "sleep completes" {
 
 ## MoonBit Error Handling (Checked Errors)
 
-MoonBit uses checked error-throwing functions, not unchecked exceptions. All errors are a subtype of `Error` and you can declare your own error types using `suberror`.
-Use `raise` in signatures to declare error types and let errors propagate by
-default.  `try { } catch { }`
-to handle errors explicitly. Use `try!` to abort if it does raise. Occasionally, use `try?` to convert to `Result[...]` in tests for inspection.
+MoonBit uses checked error-throwing functions, not unchecked exceptions. All errors are a subtype of `Error`, and you can declare your own error types using `suberror`.
+
+Checked errors are tracked in function signatures, not marked at every call site. A function that may raise declares `raise` or `raise SomeError`. If the caller only wants to pass that error upward, the caller also declares a compatible `raise` and calls the raising function normally.
+
+- Plain call inside a `raise` function: propagate automatically.
+- `fn main raise { ... }` is valid for synchronous command-line probes and small examples that should propagate errors. For async entry points, use `async fn main { ... }`; async functions can raise by default.
+- In `suberror` constructors, labeled payloads use `label~ : Type`; call and pattern-match them with `label=value`.
+- `expr catch { ... }` or `try { ... } catch { ... }`: handle explicitly.
+- `try! expr`: abort if an error is raised.
+
+Do not add Swift-style `try` for propagation. Do not use legacy `function_name!(...)` or `function_name(...)?` syntax for new code.
 
 ```mbt check
 ///|
@@ -771,19 +813,25 @@ fn parse_int(s : String, position~ : Position) -> Int raise ParseError {
 }
 
 ///|
-/// Just declare `raise` to not track specific error types
-fn div(x : Int, y : Int) -> Int raise {
+/// Declare a specific error type when callers should handle it precisely
+fn div(x : Int, y : Int) -> Int raise ValueError {
   if y is 0 {
-    fail("Division by zero")
+    raise ValueError::ValueError("Division by zero")
   }
   x / y
 }
 
 ///|
-test "inspect raise function" {
-  let result : Result[Int, Error] = try? div(1, 0)
-  guard result is Err(Failure::Failure(msg)) && msg.contains("Division by zero") else {
-    fail("Expected error")
+test "expected success calls directly" {
+  inspect(div(6, 3), content="2")
+}
+
+///|
+test "expected failure handles the raised error" {
+  try div(1, 0) catch {
+    ValueError::ValueError(message) => inspect(message, content="Division by zero")
+  } noraise {
+    _ => fail("expected to fail")
   }
 }
 
@@ -792,6 +840,8 @@ test "inspect raise function" {
 ///|
 /// Propagate automatically
 fn use_parse(s : String, position~ : Position) -> Int raise ParseError {
+  // This plain call is the correct propagation syntax.
+  // `try! parse_int(...)` would abort instead of propagating.
   let x = parse_int(s, position~) // label punning, equivalent to position=position
   // Error auto-propagates by default.
   // Unlike Swift, you do not need to mark `try` for functions that can raise
@@ -822,7 +872,7 @@ fn handle_parse(s : String, position~ : Position) -> Int {
 
 Important: When calling a function that can raise errors, if you only want to
 propagate the error, you do not need any marker; the compiler infers it.
-Note that all `async` functions automatically can raise errors without explicitly stating this.
+Async functions automatically can raise errors without explicitly stating this. Do not add `raise` to async functions for propagation; add `noraise` only when the async function must reject unhandled errors.
 
 ## Integer, Char and overloaded literals
 
@@ -898,7 +948,8 @@ test "string indexing and utf8 encode/decode" {
   let eq_char : Char = '='
   // s[0] == eq_char // ❌ Won't compile - eq_char is not a literal, lhs is UInt while rhs is Char
   // Use: s[0] == '=' or s.get_char(0) == Some(eq_char)
-  let bytes = @utf8.encode("中文") // utf8 encode package is in stdlib
+  // Requires `"moonbitlang/core/encoding/utf8"` in `moon.pkg`.
+  let bytes = @utf8.encode("中文")
   assert_true(bytes is [0xe4, 0xb8, 0xad, 0xe6, 0x96, 0x87])
   let s2 : String = @utf8.decode(bytes) // decode utf8 bytes back to String
   assert_true(s2 is "中文")
@@ -920,16 +971,10 @@ test "string interpolation basics" {
   let config = { "cache": 123 }
   let version = 1.0
   println("Hello \{name} v\{version}") // "Hello Moon v1"
-  // ❌ Wrong - quotes inside interpolation not allowed:
-  // println("  - Checking if 'cache' section exists: \{config["cache"]}")
-
-  // ✅ Correct - extract to variable first:
-  let has_key = config["cache"] // `"` not allowed in interpolation
-  println("  - Checking if 'cache' section exists: \{has_key}")
+  // ✅ Quoted map keys are allowed inside interpolation expressions.
+  println("  - Checking if 'cache' section exists: \{config["cache"]}")
   let sb = StringBuilder()
-  sb.write_char('[')
-  sb.write_view([ for x in [1, 2, 3] => "\{x}" ].join(","))
-  sb.write_char(']')
+  sb <+ "[\{[ for x in [1, 2, 3] => "\{x}" ].join(",")}]"
   inspect(sb, content="[1,2,3]")
   let x = 42
   let streamed = StringBuilder()
@@ -938,7 +983,8 @@ test "string interpolation basics" {
 }
 ```
 
-Expressions inside `\{}` can only be _basic expressions_ (no quotes, newlines, or nested interpolations). String literals are not allowed as they make lexing too difficult.
+Expressions inside `\{}` must be single-line expressions.
+Nested interpolations and string literals are supported, but line breaks inside `\{}` are not.
 
 String interpolation can also be streamed directly into a `Logger`/`StringBuilder`-style writer with `<+`:
 
@@ -1083,7 +1129,13 @@ test "user defined types: enum and struct" {
 
 ```mbt check
 ///|
-pub fn binary_search(arr : ArrayView[Int], value : Int) -> Result[Int, Int] {
+pub(all) enum SearchIndex {
+  Found(Int)
+  InsertionPoint(Int)
+} derive(Debug, Eq)
+
+///|
+pub fn binary_search(arr : ArrayView[Int], value : Int) -> SearchIndex {
   let len = arr.length()
   // functional for loop:
   // initial state ; [predicate] ; [post-update] {
@@ -1101,9 +1153,9 @@ pub fn binary_search(arr : ArrayView[Int], value : Int) -> Result[Int, Int] {
     }
   } nobreak { // exit of for loop
     if i < len && arr[i] == value {
-      Ok(i)
+      Found(i)
     } else {
-      Err(i)
+      InsertionPoint(i)
     }
   } where {
     proof_invariant: 0 <= i && i <= j && j <= len,
@@ -1132,8 +1184,8 @@ pub fn binary_search(arr : ArrayView[Int], value : Int) -> Result[Int, Int] {
 ///|
 test "functional for loop control flow" {
   let arr : Array[Int] = [1, 3, 5, 7, 9]
-  debug_inspect(binary_search(arr, 5), content="Ok(2)") // Array to ArrayView implicit conversion when passing as arguments
-  debug_inspect(binary_search(arr, 6), content="Err(3)")
+  debug_inspect(binary_search(arr, 5), content="Found(2)") // Array to ArrayView implicit conversion when passing as arguments
+  debug_inspect(binary_search(arr, 6), content="InsertionPoint(3)")
   // for iteration is supported too
   for i, v in arr {
     println("\{i}: \{v}") // `i` is index, `v` is value
