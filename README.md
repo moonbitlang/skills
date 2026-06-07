@@ -4,11 +4,13 @@ Agent Skills are folders of instructions, scripts, and resources that AI agents 
 
 ## Installing
 
-Install all skills for every supported agent:
+Install all skills to the portable universal skills directory:
 
 ```sh
-npx skills@latest add moonbitlang/skills -g --all --copy
+npx skills@latest add moonbitlang/skills -g --agent universal --skill "*" --copy -y
 ```
+
+This installs one copy under `~/.agents/skills/`.
 
 Install all skills for Codex with the `skills` CLI:
 
