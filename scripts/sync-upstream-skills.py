@@ -13,17 +13,6 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "skills.sources.json"
 SKILLS = ROOT / "skills"
-TEXT_SUFFIXES = {
-    ".json",
-    ".md",
-    ".mbt",
-    ".py",
-    ".sh",
-    ".toml",
-    ".txt",
-    ".yaml",
-    ".yml",
-}
 
 
 def run(args: list[str]) -> None:
@@ -44,21 +33,6 @@ def copy_skill(src: Path, dest: Path) -> None:
         return ignored.intersection(names)
 
     shutil.copytree(src, dest, ignore=ignore)
-    strip_trailing_whitespace(dest)
-
-
-def strip_trailing_whitespace(path: Path) -> None:
-    for file_path in path.rglob("*"):
-        if not file_path.is_file() or file_path.suffix not in TEXT_SUFFIXES:
-            continue
-        original = file_path.read_bytes()
-        try:
-            text = original.decode("utf-8")
-        except UnicodeDecodeError:
-            continue
-        normalized = "\n".join(line.rstrip(" \t") for line in text.split("\n"))
-        if normalized.encode("utf-8") != original:
-            file_path.write_text(normalized)
 
 
 def main() -> None:

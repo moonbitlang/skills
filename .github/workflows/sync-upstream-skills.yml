@@ -27,7 +27,7 @@ jobs:
           python3 -m json.tool skills.sources.json >/dev/null
           python3 -m py_compile scripts/sync-upstream-skills.py
           npx skills@latest add . --list
-          git diff --check
+          git diff --check -- . ':(exclude)skills/**'
           rm -rf scripts/__pycache__ .agents skills-lock.json
 
       - name: Create pull request
@@ -59,11 +59,18 @@ jobs:
           - python3 -m json.tool skills.sources.json
           - python3 -m py_compile scripts/sync-upstream-skills.py
           - npx skills@latest add . --list
-          - git diff --check
+          - git diff --check -- . ':(exclude)skills/**'
           BODY
 
-          if gh pr view "$branch" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh pr edit "$branch" \
+          existing_pr="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --head "$branch" \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [ -n "$existing_pr" ]; then
+            gh pr edit "$existing_pr" \
               --repo "$GITHUB_REPOSITORY" \
               --title "Sync upstream MoonBit skills" \
               --body-file "$body_file"

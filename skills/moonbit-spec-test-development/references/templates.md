@@ -47,7 +47,7 @@ pub fn parse_yaml(input : String) -> Yaml raise ParseError {
 }
 ```
 
-## <pkg>_easy_test.mbt
+## <pkg>_easy_test.mbt 
 
 ```mbt
 ///|
@@ -58,7 +58,7 @@ test "spec parses simple yaml" {
 ... // more tests
 ```
 
-## <pkg>_mid_test.mbt
+## <pkg>_mid_test.mbt 
 
 ```mbt
 ///|
@@ -69,7 +69,7 @@ test "spec handles lists in yaml" {
 ... // more tests
 ```
 
-## <pkg>_difficult_test.mbt
+## <pkg>_difficult_test.mbt 
 ```mbt
 ///|
 test "spec handles nested yaml" {

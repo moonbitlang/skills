@@ -65,12 +65,20 @@ Some skills are vendored from upstream repositories. Their sources are listed in
 ```sh
 ./scripts/sync-upstream-skills.py
 npx skills@latest add . --list
+git diff --check -- . ':(exclude)skills/**'
 git diff
 ```
 
-The same sync path also runs weekly in GitHub Actions and opens a pull request
+Skills listed in `skills.sources.json` are mirrored from their upstream
+repositories. Change those skills upstream rather than editing the vendored copy
+here; the sync script replaces each listed skill directory with the upstream
+contents.
+
+The same sync path also runs daily in GitHub Actions and opens a pull request
 when upstream skill contents change.
 
 ## License
 
-The license of an individual skill can be found directly inside the skill's directory inside the LICENSE.txt file.
+License files are kept inside individual skill directories when upstream
+provides them. For vendored skills without a local license file, check the
+source repository listed in `skills.sources.json`.

@@ -189,7 +189,7 @@ moon run -c $'fn main { try @string.parse_int("2147483648") catch { _ => println
 # 2147483648
 ```
 
-`@string.parse_int` rejects out-of-range decimals, but handwritten digit accumulation in `Int` silently wraps. Accumulate offsets, lengths, object numbers, or serialized counters in `Int64`/`UInt64`; bounds-check before narrowing to `Int`.
+`@string.parse_int` rejects out-of-range decimals, but handwritten digit accumulation in `Int` silently wraps. Accumulate offsets, lengths, object numbers, or serialized counters in `Int64`/`UInt64`; bounds-check before narrowing to `Int`. 
 
 ```sh
 moon run -c 'fn main { println(0x8EA2A1A1 < 0); println(0x8EA2A1A1); println(0x7FFFFFFF < 0x8EA2A1A1); println((-1) % 256) }'

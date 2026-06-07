@@ -20,7 +20,7 @@ For fast, reliable task execution, follow this order:
 4. **Reliable refactoring**
    - Use `moon ide rename` for semantic refactoring. If multiple symbols share a name, add `--loc filename:line:col`.
    - If you want maintain backwards compatibility, use `#alias(old_api, deprecated)`.
-
+   
 5. **Edit minimally and package-locally**
    - Keep changes inside the correct package, use `///|` top-level delimiters, and split code into cohesive files.
 
@@ -180,6 +180,9 @@ my_module
 - **Don't write an empty parameter list for `main`** - use `fn main { ... }` or `fn main raise { ... }`, not `fn main() { ... }` or `fn main() raise ... { ... }`
 - **Don't write record-style enum or error constructor fields** - labeled constructor fields use `label~ : Type`, e.g. `InvalidNumber(input~ : String)`, not `InvalidNumber(input: String)`
 - **Prefer range `for` loops over C-style** - `for i in 0..<(n-1) {...}` and `for j in 0..=6 {...}` are more idiomatic in MoonBit
+- **Don't use `for { ... }` for infinite loops** - write `for ;; { ... }` instead
+- **Don't `derive(Show)` for debugging** - derive `Debug` and use `debug_inspect()` for test/diagnostic output (`\{to_repr(value)}` for interpolation of composed values). Reserve a manual `impl Show` for specialized display formats (JSON, XML, domain text)
+- **Don't call `@json.inspect()`** - use the prelude `json_inspect(value, ...)` without a package prefix
 - **Async** - MoonBit has no `await` keyword; do not add it. Async functions default to raising, so do not add `raise`; add `noraise` only when the async body must not raise.
   Async functions and tests are characterized by those which call other async functions.
   To identify a function or test as async, simply add the `async` prefix (e.g. `[pub] async fn ...`, `async test ...`).
@@ -209,9 +212,9 @@ my_module
   moon run -e 'fn main { println("Hello, MoonBit!") }'
   ```
 - `moon build` - Build project
-  (`moon run` and `moon build` both support `--target`)
+  (`moon run` and `moon build` both support `--target`; `moon build` also supports `--diagnostic-limit <N>`)
 - `moon check` - Type check without building, use it REGULARLY, it is fast
-  (`moon check` also supports `--target`)
+  (`moon check` also supports `--target` and `--diagnostic-limit <N>`)
 - `moon info` - Type check and generate `mbti` files.
   Run it to see if any public interfaces changed.
   (`moon info` also supports `--target`.)
@@ -286,11 +289,11 @@ Note you can also use `moon -C dir check` to run commands in a specific director
 
 Use snapshot tests as it is easy to update when behavior changes.
 
-- **Snapshot Tests**: `inspect(value, content="...")`. If unknown, write `inspect(value)` and run `moon test --update` (or `moon test -u`).
-  - Use regular `inspect()` for simple values (uses `Show` trait)
-  - Use `@json.inspect()` for complex nested structures (uses `ToJson` trait, produces more readable output)
-  - It is encouraged to `inspect` or `@json.inspect` the whole return value of a function if
-    the whole return value is not huge, this makes the test simple. You need `impl (Show|ToJson) for YourType` or `derive (Show, ToJson)`.
+- **Snapshot Tests**: write `inspect(value)` / `debug_inspect(value)` / `json_inspect(value)`, then run `moon test --update` (or `moon test -u`) to fill in `content=`.
+  - Use `inspect()` for values that implement `Show` (primitives, or types with a manual `impl Show`).
+  - Use `debug_inspect()` for any type that derives `Debug` — the default for your own data types.
+  - Use `json_inspect()` for complex nested structures (uses the `ToJson` trait, produces more readable output).
+  - It is encouraged to inspect the whole return value of a function if it is not huge; this keeps the test simple. Derive `Debug` and/or `ToJson` (or `impl Show`) on `YourType` accordingly.
 - **Update workflow**: After changing code that affects output, run `moon test --update` to regenerate snapshots, then review the diffs in your test files (the `content=` parameter will be updated automatically).
 - **Validation order**: Follow the canonical sequence in `Agent Workflow` and `Fast Task Playbooks`.
 
@@ -470,7 +473,7 @@ test {
             fn[T] Array::filter(self : Array[T], f : (T) -> Bool raise?) -> Array[T] raise?
             ```
             ---
-
+            
              Creates a new array containing all elements from the input array that satisfy
              ... omitted ...
 }
@@ -851,7 +854,7 @@ fn use_parse(s : String, position~ : Position) -> Int raise ParseError {
 }
 
 ///|
-/// Use try! to abort if it raises, no raise in the signature
+/// Use try! to abort if it raises, no raise in the signature 
 fn use_parse2(position~ : Position) -> Int {
   let x = try! parse_int("123", position~) // label punning
   x * 2
@@ -886,13 +889,13 @@ test "integer and char literal overloading disambiguation via type in the curren
     1, 1, 1, 1, 1,
   )
   // The literal `1` is overloaded based on the expected type in the current context.
-  // compile time error if the literal cannot be represented in the target type,
+  // compile time error if the literal cannot be represented in the target type, 
   // e.g. let a7 : Byte = 256 // ❌ won't compile, 256 exceeds Byte max value 255
   assert_eq(int, uint16.to_int())
   let (a1, a2, a3) : (Int, Char, UInt16) = ('b', 'b', 'b')
-  // char literal overloading, `a1` will be the unicode value of 'b',
-  // compile time error when the literal cannot be represented in the target type
-  // e.g, let a6 : UInt16 = '𐍈' // ❌ won't compile, '𐍈' is U+10348, which exceeds UInt16 max value 0xffff
+  // char literal overloading, `a1` will be the unicode value of 'b', 
+  // compile time error when the literal cannot be represented in the target type 
+  // e.g, let a6 : UInt16 = '𐍈' // ❌ won't compile, '𐍈' is U+10348, which exceeds UInt16 max value 0xffff  
   let a4 : Byte = b'b' // Byte literal
 }
 ```
@@ -985,11 +988,14 @@ test "string interpolation basics" {
 
 Expressions inside `\{}` must be single-line expressions.
 Nested interpolations and string literals are supported, but line breaks inside `\{}` are not.
-
-String interpolation can also be streamed directly into a `Logger`/`StringBuilder`-style writer with `<+`:
+#### `<+` and `<?` macros for streaming interpolation
+String interpolation can be streamed directly into a `Logger`/`StringBuilder`-style writer with `<+`, or conditionally through an optional writer with `<?`:
 
 ```mbt nocheck
 writer <+ "hello \{x}"
+writer <+ {"key1": value, "key2": value2}
+lhs <? "hello \{x}"
+lhs <? {"key1": value, "key2": value2}
 ```
 
 This expands to calls on the writer:
@@ -997,11 +1003,18 @@ This expands to calls on the writer:
 ```mbt nocheck
 writer.write_string("hello ")
 writer.write(x)
+writer.write_object_begin()
+writer.write_object_field("key1", value)
+writer.write_object_field("key2", value2)
+writer.write_object_end()
+if lhs is Some(l) { l <+ "hello \{x}" }
 ```
 
 Literal string segments use `write_string`; interpolated expressions use `write`.
-The expansion is macro-style: it depends on how the `writer` type implements the `write_string` and `write` methods. Types such as HTMLBuilder or JSONBuilder can support interpolation and streaming with the same syntax but different semantics.
-Because MoonBit allows local methods on foreign types, a package can adapt an existing writer type to this syntax by adding local `write_string` and `write` methods.
+For `<?`, `None` performs no write; `Some(writer)` applies the same `<+` expansion to the wrapped writer.
+The right-hand side of `<+` and `<?` must be a template string/multiline template string or a map object literal, not an arbitrary expression.
+The expansion is macro-style: it depends on how the `writer` type implements `write_string` and `write` for template strings, plus `write_object_begin`, `write_object_field`, and `write_object_end` for map object literals. Types such as HTMLBuilder or JSONBuilder can support interpolation and streaming with the same syntax but different semantics.
+Because MoonBit allows local methods on foreign types, a package can adapt an existing writer type to this syntax by adding those local writer methods.
 
 ### Multiple line strings
 
@@ -1319,6 +1332,92 @@ test {
 }
 ```
 
-## More details
+# MoonBit Package Organization Guideline
 
-For deeper syntax, types, and examples, read `references/moonbit-language-fundamentals.mbt.md`.
+A package should own the public concrete types whose constructors, fields, pattern matching, and methods users are expected to
+use. The owner can be the facade package itself, or a non-internal public package that the facade intentionally re-exports.
+
+Public type ownership is more important than implementation locality. If users think of a type as `@foo.X`, then `X` should be
+defined in package `foo` or in a public package re-exported by `foo`, especially if users call `X::method`, construct records,
+match enum constructors, or rely on generated `.mbti` docs.
+
+MoonBit can implicitly load the owning package for method lookup when a type is re-exported from a non-internal public package.
+For example, if `@foo` re-exports `type X` from public package `@bar`, external users can write a value as `@foo.X` and still
+call methods owned by `@bar.X`.
+
+Use `internal/*` packages for implementation support:
+
+- scanners
+- parsers for sub-syntax
+- escaping/encoding helpers
+- validation helpers
+- low-level algorithms
+- private helper result types
+
+Do not put public concrete API types in `internal/*` and expect a facade to recover the full API with re-exporting. External
+users do not get the same implicit method-owner loading for internal packages, so `x.method()` can fail even when `x` is typed
+as the facade's re-exported type. It also makes constructors, generated interfaces, and privacy boundaries harder to reason
+about.
+
+## Using `using` Correctly
+
+Use `pub using` for facade ergonomics, not for type ownership.
+
+Good use:
+
+```mbt
+// root package
+pub using @parser { parse, parse_fragment }
+pub using @dom { type Node, type NodeKind, to_markdown }
+pub using @serializer { type HtmlContext }
+```
+
+This is good when `@parser`, `@dom`, and `@serializer` are public packages that already own those APIs.
+
+Good value re-export from an internal package:
+
+```mbt
+pub using @impl { decode_entities }
+```
+
+This is acceptable if the exported function signature does not expose internal types and you intentionally want that value as
+public API.
+
+Risky use:
+
+```mbt
+pub using @internal_impl { type X }
+```
+
+Avoid this for public concrete types. If `X` is public, define it in the facade package or a non-internal public package. If
+`X` is truly internal, do not expose it as a public concrete type.
+
+Use an explicit wrapper instead of `pub using` when you need to:
+
+- translate internal helper results into public types
+- enforce public defaults
+- hide internal helper types
+- keep public API ownership clear
+- make the `.mbti` easier to review
+
+## Practical Rule
+
+If a public function returns `X`, and users should inspect, construct, pattern match, or call methods on `X`, then `X` belongs in
+the facade package that users name or a non-internal public package that the facade re-exports.
+
+If a helper package only computes data for another package, it may live under `internal/*`, but its types should either stay
+internal or be simple helper result types not exposed through the public facade.
+
+A good package boundary looks like:
+
+```text
+foo/
+  types.mbt        // public Foo, FooMode, FooResult
+  api.mbt          // public functions and Foo::methods
+  private_impl.mbt // private implementation files in same package
+
+internal/foo/
+  scanner.mbt
+  escaping.mbt
+  validation.mbt
+```
