@@ -255,14 +255,23 @@ EOF
 )"
   ````
   Get the diagnostics with "unused" in the message, which can be used to find unused code.
-- `moon explain` - Show built-in documentation for compiler diagnostics.
-  - `moon explain --diagnostics` lists warning mnemonics and IDs.
-  - `moon explain --diagnostics 31` explains warning 31 (`unused_optional_argument`).
-  - `moon explain --diagnostics unused_optional_argument` explains the same warning by mnemonic.
+- `moon explain` - Show built-in documentation for compiler diagnostics and language topics.
+  - `moon explain --diagnostic` lists warning mnemonics and IDs.
+  - `moon explain --diagnostic 31` explains warning 31 (`unused_optional_argument`).
+  - `moon explain --diagnostic unused_optional_argument` explains the same warning by mnemonic.
+  - `moon explain --attribute` lists supported attributes such as `#deprecated`, `#alias`, `#cfg`, `#coverage.skip`, and `#warnings`.
+  - `moon explain --attribute deprecated` explains the `#deprecated` attribute and its supported forms.
 - `moon add package` - Add dependency
 - `moon remove package` - Remove dependency
 - `moon fmt` - Format code - should be run periodically - note that the files may be rewritten
 Note you can also use `moon -C dir check` to run commands in a specific directory.
+
+### Profiling Hot Paths (`moon run --profile`)
+
+`moon run --profile --target native --release cmd/<main>` runs a native release build under a sampling profiler and prints ranked **self-time** and **inclusive-time** tables plus a "runtime leaf costs attributed to MoonBit callers" section (which maps allocation, reference-counting, and string-equality costs back to *your* functions), alongside a `profile.json` and a `.trace` you can open in Instruments. On macOS it needs Xcode's `xcrun xctrace`, so install the full Xcode (not just the command-line tools) first. A single parse or compute is far too short to sample meaningfully, so point the profiled `main` at a loop that exercises the hot path a few hundred times over a representative fixture; this loop harness is throwaway and should never be committed.
+
+Read **self-time** for *which function burns cycles* and **inclusive-time** for *which call subtree dominates*, then work a tight loop: profile, fix the top item, re-profile. Always re-baseline before trusting a delta — sampled timings drift with machine load, so build and benchmark the branch and `main` back-to-back (interleaved) rather than comparing against a number from an earlier session.
+
 ### Test Commands
 
 - `moon test` - Run all tests
