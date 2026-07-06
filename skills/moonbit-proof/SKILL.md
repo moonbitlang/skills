@@ -185,6 +185,9 @@ Keep `.mbtp` focused on:
 - predicates
 - lemmas
 
+Logic body limitation:
+- only `Bool`, `Byte`, `Int`, `UInt`, `Int64`, and `UInt64` constants are supported in logic body
+
 Avoid filling `.mbtp` with runtime implementation details.
 
 Two recurring helper patterns are especially useful:
