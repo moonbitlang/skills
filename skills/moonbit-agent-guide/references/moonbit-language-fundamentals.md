@@ -255,11 +255,13 @@ test "pattern match over Array, struct and StringView" {
   }
   /// StringView pattern matching for parsing
   fn is_palindrome(s : StringView) -> Bool {
-    loop s {
-      [] | [_] => true
-      [a, .. rest, b] if a == b => continue rest
-      // a is of type Char, rest is of type StringView
-      _ => false
+    for v = s {
+      match v {
+        [] | [_] => break true
+        [a, .. rest, b] if a == b => continue rest
+        // a is of type Char, rest is of type StringView
+        _ => break false
+      }
     }
   }
 
@@ -267,41 +269,41 @@ test "pattern match over Array, struct and StringView" {
 }
 ```
 
-## Functional `loop` control flow
+## Functional `for` control flow
 
-The `loop` construct is unique to MoonBit:
+Functional `for` loops carry state across iterations using comma-separated bindings:
 
 ```mbt check
 ///|
-/// Functional loop with pattern matching on loop variables
+/// Functional for loop with pattern matching on loop variables
 /// @list.List is from the standard library
 fn sum_list(list : @list.List[Int]) -> Int {
-  loop (list, 0) {
-    (Empty, acc) => acc // Base case returns accumulator
-    (More(x, tail=rest), acc) => continue (rest, x + acc) // Recurse with new values
+  for v = list, acc = 0 {
+    match v {
+      Empty => break acc // Base case returns accumulator
+      More(x, tail=rest) => continue rest, acc + x // Recurse with new values
+    }
   }
 }
 
 ///|
 ///  Multiple loop variables with complex control flow
 fn find_pair(arr : Array[Int], target : Int) -> (Int, Int)? {
-  loop (0, arr.length() - 1) {
-    (i, j) if i >= j => None
-    (i, j) => {
-      let sum = arr[i] + arr[j]
-      if sum == target {
-        Some((i, j)) // Found pair
-      } else if sum < target {
-        continue (i + 1, j) // Move left pointer
-      } else {
-        continue (i, j - 1) // Move right pointer
-      }
+  for i = 0, j = arr.length() - 1 {
+    if i >= j {
+      break None
+    } else if arr[i] + arr[j] == target {
+      break Some((i, j)) // Found pair
+    } else if arr[i] + arr[j] < target {
+      continue i + 1, j // Move left pointer
+    } else {
+      continue i, j - 1 // Move right pointer
     }
   }
 }
 ```
 
-**Note**: You must provide a payload to `loop`. If you want an infinite loop, use `while true { ... }` instead. The syntax `loop { ... }` without arguments is invalid.
+> **Note**: The older `loop <payload> { patterns => ... }` syntax is deprecated — the compiler emits Warning 0027 (`deprecated_syntax`). Migrate to functional `for`: wrap the payload expression in `for v = <expr> { match v { <arms> } }` with explicit `break`, and write `continue` values as comma-separated bindings (not parenthesized tuples as `loop` used).
 
 
 ## Methods and Traits
