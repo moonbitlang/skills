@@ -17,18 +17,16 @@ For fast, reliable task execution, follow this order:
    - Prefer `moon ide doc` queries to discover existing functions/types/methods before adding new code.
    - Use `moon ide outline`, `moon ide peek-def`, and `moon ide find-references` for semantic navigation.
 
-4. **Reliable refactoring**
-   - Use `moon ide rename` for semantic refactoring. If multiple symbols share a name, add `--loc filename:line:col`.
-   - If you want maintain backwards compatibility, use `#alias(old_api, deprecated)`.
-   
-5. **Edit minimally and package-locally**
+4. **Edit minimally and package-locally**
    - Keep changes inside the correct package, use `///|` top-level delimiters, and split code into cohesive files.
+   - For refactors, use `moon ide rename`; add `--loc filename:line:col` when names are ambiguous.
+   - Preserve compatibility with `#alias(old_api, deprecated)` when required.
 
-6. **Validate in a tight loop**
+5. **Validate in a tight loop**
    - Run `moon check` after edits, adding `--warn-list +unnecessary_annotation` to enable warning 73 for redundant annotations and over-qualified constructors (`--warn-list +73` is equivalent).
    - Run targeted tests with `moon test [dirname|filename] --filter 'glob'` and use `moon test --update` for snapshot changes.
 
-7. **Finalize before handoff**
+6. **Finalize before handoff**
    - Run `moon fmt`.
    - Run `moon info` to verify whether public APIs changed (`pkg.generated.mbti` diff).
    - Report changed files, validation commands, and any remaining risks.
@@ -182,7 +180,7 @@ my_module
 - **Don't write record-style enum or error constructor fields** - labeled constructor fields use `label~ : Type`, e.g. `InvalidNumber(input~ : String)`, not `InvalidNumber(input: String)`
 - **Prefer range `for` loops over C-style** - `for i in 0..<(n-1) {...}` and `for j in 0..=6 {...}` are more idiomatic in MoonBit
 - **Don't use `for { ... }` for infinite loops** - write `for ;; { ... }` instead
-- **Don't `derive(Show)` for debugging** - derive `Debug` and use `debug_inspect()` for test/diagnostic output (`\{to_repr(value)}` for interpolation of composed values). Reserve a manual `impl Show` for specialized display formats (JSON, XML, domain text)
+- **Don't `derive(Show)` for debugging** - derive `Debug` and use `debug_inspect()` for test/diagnostic output (`\{Repr(value)}` for interpolation of composed values). Reserve a manual `impl Show` for specialized display formats (JSON, XML, domain text)
 - **Don't call `@json.inspect()`** - use the prelude `json_inspect(value, ...)` without a package prefix
 - **Async** - MoonBit has no `await` keyword; do not add it. Async functions default to raising, so do not add `raise`; add `noraise` only when the async body must not raise.
   Async functions and tests are characterized by those which call other async functions.
@@ -334,7 +332,7 @@ Public APIs are encouraged to have docstring tests.
 
 ````mbt check
 ///|
-/// Get the largest element of a non-empty `Array`.
+/// Return the sum of an `Array`.
 ///
 /// # Example
 /// ```mbt check
@@ -342,9 +340,6 @@ Public APIs are encouraged to have docstring tests.
 ///   inspect(sum_array([1, 2, 3, 4, 5, 6]), content="21")
 /// }
 /// ```
-///
-/// # Panics
-/// Panics if the `xs` is empty.
 pub fn sum_array(xs : Array[Int]) -> Int {
   xs.fold(init=0, (a, b) => a + b)
 }
@@ -698,7 +693,7 @@ For more advanced topics like `conditional compilation`, `link configuration`, `
 
 Asynchronous programming uses compiler support plus the `moonbitlang/async` runtime. The runtime supports the native backend best, has limited JavaScript support for IO-independent APIs, and does not support WebAssembly yet. For async IO examples, prefer native. Use `moon add moonbitlang/async@<version>` and `moon ide doc "@async"` to explore the API.
 
-User-facing subpackages: `@async` (core: tasks, timers, cancellation), `@async/aqueue`, `@async/fs, `@async/stdio`, `@async/websocket`, ..etc.
+User-facing subpackages include `@async` (tasks, timers, cancellation), `@async/aqueue`, `@async/fs`, `@async/stdio`, and `@async/websocket`.
 Each must be imported separately in `moon.pkg`.
 
 1. Add the dependency and pin the native target in `moon.mod`:
@@ -964,7 +959,9 @@ test "string indexing and utf8 encode/decode" {
   guard b0 is ('\n' | 'h' | 'b' | 'a'..='z') && s is [.. "hello", .. rest] else {
     fail("unexpected string content")
   }
-  guard rest is " world"  // otherwise will crash (guard without else)
+  guard rest is " world" else {
+    fail("unexpected string suffix")
+  }
 
   // In check mode (expression with explicit type), ('\n' : UInt16) is valid.
 
@@ -1068,8 +1065,7 @@ test "multi-line string literals" {
 test "map literals and common operations" {
   // Map literal syntax
   let map : Map[String, Int] = { "a": 1, "b": 2, "c": 3 }
-  let empty : Map[String, Int] = {} // Empty map, preferred
-  let also_empty : Map[String, Int] = Map([])
+  let empty : Map[String, Int] = Map([]) // Empty map
   // From array of pairs
   let from_pairs : Map[String, Int] = Map::from_array([("x", 1), ("y", 2)])
 
@@ -1279,9 +1275,8 @@ fn g(
   let _ : Int = required
   let _ : Int? = optional
   let _ : Int = optional_with_default
-  // `to_repr` (from the prelude `Debug` trait) renders Option via the
-  // non-deprecated `Show for Repr`, avoiding the deprecated `Show for Option`.
-  "\{positional},\{required},\{to_repr(optional)},\{optional_with_default}"
+  // `Repr` renders Option without relying on its deprecated `Show` implementation.
+  "\{positional},\{required},\{Repr(optional)},\{optional_with_default}"
 }
 
 ///|
@@ -1298,7 +1293,7 @@ Callers still must pass it (as `None`/`Some(...)`).
 ```mbt check
 ///|
 fn with_config(a : Int?, b : Int?, c : Int) -> String {
-  "\{to_repr(a)},\{to_repr(b)},\{c}"
+  "\{Repr(a)},\{Repr(b)},\{c}"
 }
 
 ///|
