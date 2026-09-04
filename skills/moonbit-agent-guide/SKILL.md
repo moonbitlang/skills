@@ -1,77 +1,17 @@
 ---
 name: moonbit-agent-guide
-description: Guide for writing, refactoring, and testing MoonBit projects. Use when working in MoonBit modules or packages, organizing MoonBit files, using moon tooling (build/check/run/test/doc/ide etc.), or following MoonBit-specific layout, documentation, and testing conventions.
+description: Guide for writing, refactoring, and testing MoonBit projects, including exclusive use of `.mbtx` for agent-authored automation. Use when working in MoonBit modules or packages, organizing MoonBit files, using moon tooling (build/check/run/test/doc/ide etc.), or following MoonBit-specific layout, scripting, documentation, and testing conventions.
 ---
 
-# Agent Workflow
+# MoonBit Task Checklist
 
-For fast, reliable task execution, follow this order:
-
-1. **Clarify goal and constraints**
-   - Confirm expected behavior, non-goals, and compatibility constraints (target backend, public API stability, performance limits).
-
-2. **Locate module/package boundaries**
-   - Find `moon.mod` (module root) and relevant `moon.pkg` files (package boundaries and imports).
-
-3. **Discover APIs before coding**
-   - Prefer `moon ide doc` queries to discover existing functions/types/methods before adding new code.
-   - Use `moon ide outline`, `moon ide peek-def`, and `moon ide find-references` for semantic navigation.
-
-4. **Edit minimally and package-locally**
-   - Keep changes inside the correct package, use `///|` top-level delimiters, and split code into cohesive files.
-   - For refactors, use `moon ide rename`; add `--loc filename:line:col` when names are ambiguous.
-   - Preserve compatibility with `#alias(old_api, deprecated)` when required.
-
-5. **Validate in a tight loop**
-   - Run `moon check` after edits, adding `--warn-list +unnecessary_annotation` to enable warning 73 for redundant annotations and over-qualified constructors (`--warn-list +73` is equivalent).
-   - Run targeted tests with `moon test [dirname|filename] --filter 'glob'` and use `moon test --update` for snapshot changes.
-
-6. **Finalize before handoff**
-   - Run `moon fmt`.
-   - Run `moon info` to verify whether public APIs changed (`pkg.generated.mbti` diff).
-   - Report changed files, validation commands, and any remaining risks.
-
-
-## Fast Task Playbooks
-
-Use the smallest playbook that matches the request.
-
-### Bug Fix (No API Change Intended)
-
-1. Reproduce or identify the failing behavior.
-2. Locate symbols with `moon ide outline`, `moon ide peek-def`, `moon ide find-references`.
-3. Implement minimal fix in the current package.
-4. Validate with:
-   - `moon check`
-   - `moon test [dirname|filename] --filter 'glob'` (or closest targeted test scope)
-   - `moon fmt`
-   - `moon info` (confirm `pkg.generated.mbti` unchanged)
-
-### Refactor (Behavior Preserving)
-
-1. Confirm behavior/API invariants first.
-2. Prefer semantic rename/navigation tools:
-   - `moon ide rename`
-   - `moon ide find-references`
-   - `moon ide peek-def`
-   - If multiple symbols share a name, use `moon ide rename <symbol> <new_name> --loc filename:line:col`.
-3. Keep edits package-local and file-organization-focused.
-4. Validate with:
-   - `moon check`
-   - `moon test [dirname|filename]`
-   - `moon fmt`
-   - `moon info` (API should remain unchanged unless requested)
-
-### New Feature or Public API
-
-1. Discover existing idioms with `moon ide doc` before introducing new names.
-2. Add implementation in cohesive files with `///|` delimiters.
-3. Add/extend black-box tests and docstring examples for public APIs.
-4. Validate with:
-   - `moon check`
-   - `moon test [dirname|filename]` (use `--update` for snapshots when needed)
-   - `moon fmt`
-   - `moon info` (review and keep intended `pkg.generated.mbti` changes)
+- Locate the enclosing `moon.mod` and relevant `moon.pkg` files before editing.
+- Discover APIs with `moon ide doc`; use `outline`, `peek-def`, `find-references`, `hover`, and `rename` for semantic navigation and refactoring.
+- Use `.mbtx` exclusively for agent-authored automation; keep automation logic out of shell scripts and other scripting languages.
+- Keep changes within the correct package. Files do not define namespaces; separate top-level items with `///|`.
+- Add regression tests for bug fixes. Add black-box tests and docstring examples for new public APIs.
+- Validate with `moon check` and the narrowest relevant `moon test`; use `moon test --update` only for intended snapshot changes. Use `moon explain --diagnostic` to list warnings and `--warn-list` to enable selected warnings (for example, `+unnecessary_annotation`).
+- Run `moon fmt` and `moon info` before handoff. Review generated `.mbti` changes, especially when the public API should remain stable.
 
 
 # MoonBit Project Layouts
@@ -188,42 +128,112 @@ my_module
 
 # `moon` Essentials
 
+## Script Mode (`.mbtx`)
+
+Use `.mbtx` exclusively for agent-authored automation. Keep loops,
+conditionals, parsing, transformation, and process orchestration in MoonBit
+instead of shell scripts or another scripting language. The outer shell should
+only launch the script or run a direct, single-purpose command.
+
+An `.mbtx` file is an optional `import { ... }` block followed by ordinary
+MoonBit code, including a `main` function. Run it directly with:
+
+```bash
+moon run path/to/script.mbtx [args...]
+```
+
+Choose `main` by the effects the script actually uses:
+
+- `fn main { ... }` is synchronous and does not propagate errors.
+- `fn main raise { ... }` is synchronous and may propagate checked errors.
+- `async fn main { ... }` is for scripts that call async APIs. Import
+  `"moonbitlang/async"`; do not add `raise` or `await`.
+
+All three work on the default Wasm target. Do not mark a purely synchronous
+script `async`; MoonBit reports `unused_async`.
+
+When automation runs commands, import `"moonbitlang/async/shell"` and use
+`@shell.Cmd` or `@shell.Pipeline`. They keep the executable and arguments
+separate and never invoke a shell, so characters such as `|`, `$()`, and `*`
+are passed literally. Use ordinary MoonBit control flow instead of `&&`, shell
+loops, or command substitution.
+
+Script mode defaults to Wasm. Supplying `--wasm-policy policy.json` enables
+deny-by-default control over MoonBit host APIs; grant only the required
+filesystem, environment, network, or process access. For process automation,
+prefer a narrow `process.allow` rule with an exact program and argument prefix
+over `process.spawn: true`. The policy authorizes a child process but does not
+sandbox the child itself, so the host must also confine child processes when
+they are not trusted.
+
+Minimal script (`hello.mbtx`):
+
+```mbtx
+fn main {
+  println("Hello from MoonBit script mode")
+}
+```
+
+Command-line automation (`sum_args.mbtx`):
+
+```mbtx
+import {
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+}
+
+fn main raise {
+  let args = @env.args()
+  for arg in args[1:]; total = 0 {
+    continue total + @string.parse_int(arg)
+  } nobreak {
+    println(total)
+  }
+}
+```
+
+Running `moon run sum_args.mbtx 10 20 12` prints `42`.
+
+Package imports work directly in the script header (`format_json.mbtx`):
+
+```mbtx
+import {
+  "moonbitlang/core/json",
+}
+
+fn main raise {
+  let source =
+    #|{
+    #|  "project": "moonbit",
+    #|  "enabled": true
+    #|}
+  let value = @json.parse(source)
+  println(value.stringify(indent=2))
+}
+```
+
+Async automation works on the default Wasm target. For example, run
+`moon run async_job.mbtx` for:
+
+```mbtx
+import {
+  "moonbitlang/async",
+}
+
+async fn main {
+  @async.sleep(10)
+  println("async automation complete")
+}
+```
+
 ## Essential Commands
 
 - `moon new my_project` - Create new project
 - `moon run cmd/main` - Run main package
-- `moon run - < hello.mbt` - Run code from stdin (useful for quick experiments)
+- `moon run - < hello.mbtx` - Run script code from stdin (useful for quick experiments)
 - `moon run -e "code snippet"` - Run code from command line argument (good for one-liners)
-  Example:
-  ```bash
-  cat hello.mbt | moon run -
-  ```
-  This allows you to quickly test small snippets of MoonBit code without creating a full project.
-  It can also be used with heredoc syntax for multi-line snippets:
-  ```bash
-  moon run - <<'EOF'
-  fn main {
-    println("Hello, MoonBit!")
-  }
-  EOF
-  ```
   ```
   moon run -e 'fn main { println("Hello, MoonBit!") }'
-  ```
-  For multi-line `-e` snippets, especially snippets with `import { ... }`,
-  pass real newlines. Do not put literal `\n` escapes inside single quotes;
-  MoonBit will see backslash characters, not line breaks. Use command
-  substitution with a quoted heredoc:
-  ```bash
-  moon run --target native -e "$(cat <<'EOF'
-  import {
-    "moonbitlang/x/sys"
-  }
-  fn main {
-    println(@sys.get_cli_args().join("|"))
-  }
-  EOF
-  )"
   ```
 - `moon build` - Build project
   (`moon run` and `moon build` both support `--target`; `moon build` also supports `--diagnostic-limit <N>`)
@@ -233,42 +243,55 @@ my_module
   Run it to see if any public interfaces changed.
   (`moon info` also supports `--target`.)
 - `moon check --target all` - Type check for all backends
-  moon check --output-json can be used with `jq` to filter the output, e.g,
-  ```
-  moon check --output-json 2>&1 | jq -R 'fromjson? | select(.message |
-      contains("unused"))'
-  ```
-  or, for richer post-processing, pipe into a small MoonBit program via
-  `moon run -e`. Use `--target native` (the default `wasm-gc` does not support
-  `async fn main` or `@stdio.stdin`), a quoted heredoc (`<<'EOF'`) so the shell
-  does not expand `$`/backticks in the source, and a de-indented closing `EOF`:
-  ````
-moon check --output-json 2>&1 | moon run --target native -e "$(cat <<'EOF'
+  Process structured diagnostics with a saved `.mbtx` script rather than a
+  shell pipeline or another scripting language. For example, save this as
+  `filter_diagnostics.mbtx`; `@shell.Cmd::each_line` runs `moon check` directly,
+  streams its JSON output, and returns its exit status:
+  ```mbtx
 import {
   "moonbitlang/async",
-  "moonbitlang/async/stdio",
+  "moonbitlang/async/shell",
   "moonbitlang/core/json",
 }
 
 async fn main {
-  let seen = {}
-  while @stdio.stdin.read_until("\n") is Some(line) {
-    try @json.parse(line.trim()) catch {
-      _ => ()
-    } noraise {
-      {"level": "warning", "path": String(p), ..} =>
-        if !seen.contains(p) {
-          seen[p] = ()
-          println(p)
-        }
-      _ => ()
-    }
+  let seen : Map[String, Unit] = Map([])
+  let exit_code = @shell.Cmd(
+    "moon",
+    ["check", "--target", "all", "--output-json"],
+  ).each_line(line => {
+      try @json.parse(line) catch {
+        _ => ()
+      } noraise {
+        { "level": "warning", "path": String(path), .. } =>
+          if !seen.contains(path) {
+            seen[path] = ()
+            println(path)
+          }
+        _ => ()
+      }
+    })
+  if exit_code != 0 {
+    fail("moon check exited with code \{exit_code}")
   }
 }
-EOF
-)"
-  ````
-  Get the diagnostics with "unused" in the message, which can be used to find unused code.
+  ```
+  Run it with a policy that allows that command prefix:
+  ```json
+  {
+    "process": {
+      "allow": [
+        {
+          "program": "moon",
+          "args_prefix": ["check", "--target", "all", "--output-json"]
+        }
+      ]
+    }
+  }
+  ```
+  ```bash
+  moon run --wasm-policy moon-check-policy.json filter_diagnostics.mbtx
+  ```
 - `moon explain` - Show built-in documentation for compiler diagnostics and language topics.
   - `moon explain --diagnostic` lists warning mnemonics and IDs.
   - `moon explain --diagnostic 31` explains warning 31 (`unused_optional_argument`).
@@ -318,7 +341,7 @@ Use snapshot tests as it is easy to update when behavior changes.
   - Use `json_inspect()` for complex nested structures (uses the `ToJson` trait, produces more readable output).
   - It is encouraged to inspect the whole return value of a function if it is not huge; this keeps the test simple. Derive `Debug` and/or `ToJson` (or `impl Show`) on `YourType` accordingly.
 - **Update workflow**: After changing code that affects output, run `moon test --update` to regenerate snapshots, then review the diffs in your test files (the `content=` parameter will be updated automatically).
-- **Validation order**: Follow the canonical sequence in `Agent Workflow` and `Fast Task Playbooks`.
+- **Validation order**: Follow the `MoonBit Task Checklist`.
 
 - Black-box by default: Call only public APIs via `@package.fn`. Use white-box tests only when private members matter.
 - Grouping: Combine related checks in one `test "..." { ... }` block for speed and clarity.
@@ -445,7 +468,7 @@ pub fn String::rev_find(String, StringView) -> Int?
   Returns ... omitted ...
 ````
 
-**Best practice**: Treat this section as command reference; execution order is defined in `Agent Workflow`.
+**Best practice**: Treat this section as command reference; validation is defined in the `MoonBit Task Checklist`.
 
 ### `moon ide rename sym new_name [--loc filename:line:col]` example
 
@@ -691,28 +714,23 @@ For more advanced topics like `conditional compilation`, `link configuration`, `
 
 ## Async IO
 
-Asynchronous programming uses compiler support plus the `moonbitlang/async` runtime. The runtime supports the native backend best, has limited JavaScript support for IO-independent APIs, and does not support WebAssembly yet. For async IO examples, prefer native. Use `moon add moonbitlang/async@<version>` and `moon ide doc "@async"` to explore the API.
+Asynchronous programming uses compiler support plus the `moonbitlang/async`
+runtime. `async fn main` works on the default Wasm target as well as native when
+the runtime is imported. Individual host I/O APIs may still be target-specific;
+use `moon ide doc "@async"` and validate on the intended target.
 
-User-facing subpackages include `@async` (tasks, timers, cancellation), `@async/aqueue`, `@async/fs`, `@async/stdio`, and `@async/websocket`.
-Each must be imported separately in `moon.pkg`.
+User-facing subpackages include `@async` (tasks, timers, cancellation),
+`@async/aqueue`, `@async/fs`, `@async/shell` (shell-free process orchestration),
+`@async/stdio`, and `@async/websocket`.
+Each must be imported separately in `moon.pkg` or an `.mbtx` import block.
 
-1. Add the dependency and pin the native target in `moon.mod`:
-   ```
-   import {
-     "moonbitlang/async@0.18.1",
-   }
-
-   options(
-     "preferred-target": "native",
-   )
-   ```
-2. In the executable's `moon.pkg`, set `is-main`, restrict to native, and import what you need:
+1. Add the dependency with `moon add moonbitlang/async`.
+2. In the executable's `moon.pkg`, set `is-main` and import what you need:
    ```
    import {
      "moonbitlang/async",
      "moonbitlang/async/stdio",
    }
-   supported_targets = "native"
    options(
      "is-main": true,
    )
@@ -772,7 +790,9 @@ async test "sleep completes" {
 - There is no `await` keyword (similar to functions that raise errors). Inside an `async test`, call async functions normally.
 - `async test` also has the async raising effect by default; do not add `raise`.
 - Async tests run in parallel by default. Avoid shared ports, files, environment variables, and global mutable state unless each test isolates its resources.
-- Run with `moon test --target native` unless `moon.mod` sets `"preferred-target": "native"`. Use `moon test -v` when checking test names or async scheduling behavior.
+- Run `moon test` on the intended target; add `--target native` only when the
+  APIs under test require native execution. Use `moon test -v` when checking
+  test names or async scheduling behavior.
 - In `README.mbt.md` and docstrings, `mbt check` blocks may contain `async test` blocks; make sure the package imports `moonbitlang/async` for the relevant test mode.
 
 # MoonBit Language Tour
@@ -1191,27 +1211,6 @@ pub fn binary_search(arr : ArrayView[Int], value : Int) -> SearchIndex {
     } else {
       InsertionPoint(i)
     }
-  } where {
-    proof_invariant: 0 <= i && i <= j && j <= len,
-    proof_invariant: i == 0 || arr[i - 1] < value,
-    proof_invariant: j == len || arr[j] >= value,
-    proof_reasoning: (
-      #|For a sorted array, the boundary invariants are witnesses:
-      #|  - `arr[i-1] < value` implies all arr[0..i) < value (by sortedness)
-      #|  - `arr[j] >= value` implies all arr[j..len) >= value (by sortedness)
-      #|
-      #|Preservation proof:
-      #|  - When arr[h] < value: new_i = h+1, and arr[new_i - 1] = arr[h] < value ✓
-      #|  - When arr[h] >= value: new_j = h, and arr[new_j] = arr[h] >= value ✓
-      #|
-      #|Termination: j - i decreases each iteration (h is strictly between i and j)
-      #|
-      #|Correctness at exit (i == j):
-      #|  - By invariants: arr[0..i) < value and arr[i..len) >= value
-      #|  - So if value exists, it can only be at index i
-      #|  - If arr[i] != value, then value is absent and i is the insertion point
-      #|
-    ),
   }
 }
 
@@ -1229,34 +1228,6 @@ test "functional for loop control flow" {
 
 You are *STRONGLY ENCOURAGED* to use functional `for` loops instead of imperative loops
 *WHENEVER POSSIBLE*, as they are easier to read and reason about.
-
-### Loop Invariants with `where` Clause
-
-The `where` clause attaches **machine-checkable invariants** and **human-readable reasoning** to functional `for` loops. This enables formal verification thinking while keeping the code executable. Note for trivial loops, you are encouraged to convert it into `for .. in` so no reasoning is needed.
-
-**Syntax:**
-```mbt nocheck
-for ... {
-  ...
-} where {
-  invariant : <boolean_expr>,   // checked at runtime in debug builds
-  invariant : <boolean_expr>,   // multiple invariants allowed
-  reasoning : <string>         // documentation for proof sketch
-}
-```
-
-**Writing Good Invariants:**
-
-1. **Make invariants checkable**: Invariants must be valid MoonBit boolean expressions using loop variables and captured values.
-
-2. **Use boundary witnesses**: For properties over ranges (e.g., "all elements in arr[0..i) satisfy P"), check only boundary elements. For sorted arrays, `arr[i-1] < value` implies all `arr[0..i) < value`.
-
-3. **Handle edge cases with `||`**: Use patterns like `i == 0 || arr[i-1] < value` to handle boundary conditions where the check would be out of bounds.
-
-4. **Cover three aspects in reasoning**:
-   - **Preservation**: Why each `continue` maintains the invariants
-   - **Termination**: Why the loop eventually exits (e.g., a decreasing measure)
-   - **Correctness**: Why the invariants at exit imply the desired postcondition
 
 ## Label and Optional Parameters
 
