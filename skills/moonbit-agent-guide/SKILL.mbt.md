@@ -5,6 +5,7 @@ description: Guide for writing, refactoring, and testing MoonBit projects, inclu
 
 # MoonBit Task Checklist
 
+- Check `moon version --all` and the project's dependency versions before applying migration advice. This guide was validated with moon/moonc 2026-10-16 (moonc v0.10.16); async cancellation guidance below applies to `moonbitlang/async` 0.22 and later.
 - Locate the enclosing `moon.mod` and relevant `moon.pkg` files before editing.
 - Discover APIs with `moon ide doc`; use `outline`, `peek-def`, `find-references`, `hover`, and `rename` for semantic navigation and refactoring.
 - Use `.mbtx` exclusively for agent-authored automation; keep automation logic out of shell scripts and other scripting languages.
@@ -12,6 +13,7 @@ description: Guide for writing, refactoring, and testing MoonBit projects, inclu
 - Add regression tests for bug fixes. Add black-box tests and docstring examples for new public APIs.
 - Validate with `moon check` and the narrowest relevant `moon test`; use `moon test --update` only for intended snapshot changes. Use `moon explain --diagnostic` to list warnings and `--warn-list` to enable selected warnings (for example, `+unnecessary_annotation`).
 - Run `moon fmt` and `moon info` before handoff. Review generated `.mbti` changes, especially when the public API should remain stable.
+- For executable documentation, check and test every `.mbt.md` with `--deny-warn`, without blanket warning suppression. Format the examples too: accepted compatibility syntax is not necessarily canonical syntax. Standalone Markdown can be checked/tested directly; if `moon fmt` requires a module, format copies in a temporary module and sync the results back.
 
 
 # MoonBit Project Layouts
@@ -36,7 +38,7 @@ my_module
 ├── cmd                       # Command line directory
 │   └── main
 │       ├── main.mbt
-│       └── moon.pkg     # executable package with `options("is-main": true)`
+│       └── moon.pkg     # executable package with `pkgtype(kind: "executable")`
 ├── liba/                     # Library packages
 │   └── moon.pkg         # Referenced by other packages as `@username/my_module/liba`
 │   └── libb/                 # Library packages
@@ -111,6 +113,7 @@ my_module
 - **Don't ignore error handling** - either handle errors explicitly, or declare `raise` on the caller and let checked errors propagate
 - **Don't use `return` unnecessarily** - the last expression is the return value
 - **Don't create methods without Type:: prefix** - methods need explicit type prefix
+- **Trait syntax**: write `fn` inside trait declarations and `impl Trait for Type with fn method(...)`. To expose a trait implementation through dot syntax, use `extend Type with Trait::{method}` explicitly; see the methods example in `references/moonbit-language-fundamentals.mbt.md`.
 - **Don't forget to handle array bounds** - use `get()` for safe access
 - **Don't forget @package prefix when calling functions from other packages**
 - **Don't use ++ or -- (not supported)** - use `i = i + 1` or `i += 1`
@@ -122,6 +125,7 @@ my_module
 - **Don't use `for { ... }` for infinite loops** - write `for ;; { ... }` instead
 - **Don't `derive(Show)` for debugging** - derive `Debug` and use `debug_inspect()` for test/diagnostic output (`\{Repr(value)}` for interpolation of composed values). Reserve a manual `impl Show` for specialized display formats (JSON, XML, domain text)
 - **Don't call `@json.inspect()`** - use the prelude `json_inspect(value, ...)` without a package prefix
+- **JavaScript FFI**: use `FixedArray[T]` at JavaScript array boundaries. The JavaScript representation of resizable `Array[T]` is not a stable FFI contract.
 - **Async** - MoonBit has no `await` keyword; do not add it. Async functions default to raising, so do not add `raise`; add `noraise` only when the async body must not raise.
   Async functions and tests are characterized by those which call other async functions.
   To identify a function or test as async, simply add the `async` prefix (e.g. `[pub] async fn ...`, `async test ...`).
@@ -363,7 +367,7 @@ Public APIs are encouraged to have docstring tests.
 ///   inspect(sum_array([1, 2, 3, 4, 5, 6]), content="21")
 /// }
 /// ```
-pub fn sum_array(xs : Array[Int]) -> Int {
+pub fn sum_array(xs : Array[Int32]) -> Int32 {
   xs.fold(init=0, (a, b) => a + b)
 }
 ````
@@ -407,7 +411,7 @@ For project-local symbols and navigation, use:
 - `moon ide find-references <symbol>` to locate usages, and
 - `moon ide peek-def` for inline definition context and to locate toplevel symbols.
 - `moon ide hover sym --loc filename:line:col` to get type information at a specific location.
-- `moon ide rename <symbol> <new_name> [--loc filename:line:col]` to rename a symbol project-wide. Prefer `--loc` when symbol names are ambiguous.
+- `moon ide rename <symbol> <new_name> [--loc filename:line:col]` to preview a semantic rename. Add `--apply` to rewrite files. Prefer `--loc` when symbol names are ambiguous.
 - `moon ide analyze [path]` to inspect public API usage of a package or module when planning safe refactors.
 These tools save tokens and are more precise than grepping (`grep` displays results in both definitions and call sites including comments too).
 
@@ -455,7 +459,7 @@ fn from_array(ArrayView[Byte]) -> Buffer
 $ moon ide doc "@buffer.new" # list the specific function in a package:
 package "moonbitlang/core/buffer"
 
-pub fn new(size_hint? : Int) -> Buffer
+pub fn new(size_hint? : Int32) -> Buffer
   Creates ... omitted ...
 
 
@@ -466,7 +470,7 @@ pub fn String::rev(String) -> String
   Returns ... omitted ...
   # ... more
 
-pub fn String::rev_find(String, StringView) -> Int?
+pub fn String::rev_find(String, StringView) -> Int32?
   Returns ... omitted ...
 ````
 
@@ -490,8 +494,8 @@ $ moon ide rename compute_sum calculate_sum --loc math_utils.mbt:2
 *** Update File: math_utils.mbt
 @@
  ///|
--pub fn compute_sum(a: Int, b: Int) -> Int {
-+pub fn calculate_sum(a: Int, b: Int) -> Int {
+-pub fn compute_sum(a: Int32, b: Int32) -> Int32 {
++pub fn calculate_sum(a: Int32, b: Int32) -> Int32 {
    a + b
  }
 *** Update File: math_utils_test.mbt
@@ -511,7 +515,7 @@ When the user asks: "What is the signature and docstring of `filter`? at line 14
 ```
 $ moon ide hover  filter --loc hover.mbt:14
 test {
-  let a: Array[Int] = [1]
+  let a: Array[Int32] = [1]
   inspect(a.filter((x) => {x > 1}))
             ^^^^^^
             ```moonbit
@@ -533,7 +537,7 @@ you can run `moon ide peek-def Parser::read_u32_leb128` to get the definition co
 
 ``` file src/parse.mbt
 L45:|///|
-L46:|fn Parser::read_u32_leb128(self : Parser) -> UInt raise ParseError {
+L46:|fn Parser::read_u32_leb128(self : Parser) -> UInt32 raise ParseError {
 L47:|  ...
 ...:| }
 ```
@@ -547,7 +551,7 @@ Definition found at file src/parse.mbt
 2 | priv struct Parser {
   |             ^^^^^^
   |   bytes : Bytes
-  |   mut pos : Int
+  |   mut pos : Int32
   | }
   |
 ```
@@ -593,6 +597,17 @@ $ moon ide find-references TranslationUnit
 ```
 
 ## Package Management
+
+### Discovering Modules and Dependencies
+
+```sh
+moon search 'html markdown' --limit 5
+moon view moonbitlang/async --versions
+moon tree --json
+moon tree --package --target native --json
+```
+
+`search` and `view` query the registry and work outside a project. `tree` inspects the current project's resolved dependencies; `--package` shows package imports rather than only module dependencies. Discover a version before adding or upgrading it instead of copying an old example version.
 
 ### Adding Dependencies
 
@@ -651,21 +666,19 @@ import {
 import {
   "username/hello/internal_test_helpers",
 } for "wbtest"
-options(
-  "is-main": true,
-)
+pkgtype(kind: "executable")
 ```
 
 Use `supported_targets = "native"` or another target-set expression at top level when the whole package only supports selected backends.
 
 ```
 supported_targets = "native"
-options(
-  "is-main": true,
-)
+pkgtype(kind: "executable")
 ```
 
 Packages are per directory and packages without a `moon.pkg` file are not recognized.
+
+Use one `pkgtype` declaration per package: `library` (the default), `executable` for a `main` entry point, or `foreign_library` for exports consumed by a foreign host. These are alternatives. `pkgtype(kind: "executable")` replaces legacy `options("is-main": true)`; `pkgtype(kind: "foreign_library")` replaces legacy `options(link: true)`. Backend-specific `options(link: { ... })` still configures linker details; see `references/advanced-moonbit-build.md`.
 
 ### Package Importing (used in moon.pkg)
 
@@ -680,7 +693,7 @@ Packages are per directory and packages without a `moon.pkg` file are not recogn
 - Import `"username/hello/liba"` → use `@liba.function()` (default alias is the last path segment)
 - Import with custom alias `import { "moonbitlang/x/encoding" @enc}` → use `@enc.function()`
   (Note that this is unnecessary when the last path segment is identical to the alias name.)
-- In `_test.mbt` or `_wbtest.mbt` files, the package being tested is auto-imported
+- In `_test.mbt`, use the tested package's alias explicitly (`@packagename.fn`); unqualified access relies on compatibility imports and triggers `test_unqualified_package`. `_wbtest.mbt` shares the package's scope and can access private definitions directly.
 
 Example:
 
@@ -727,15 +740,13 @@ User-facing subpackages include `@async` (tasks, timers, cancellation),
 Each must be imported separately in `moon.pkg` or an `.mbtx` import block.
 
 1. Add the dependency with `moon add moonbitlang/async`.
-2. In the executable's `moon.pkg`, set `is-main` and import what you need:
+2. In the executable's `moon.pkg`, declare the package type and import what you need:
    ```
    import {
      "moonbitlang/async",
      "moonbitlang/async/stdio",
    }
-   options(
-     "is-main": true,
-   )
+   pkgtype(kind: "executable")
    ```
 3. Define `async fn main` (not `fn main`). Spawn concurrent tasks via `with_task_group` for structured concurrency:
    ```mbt nocheck
@@ -759,9 +770,17 @@ Each must be imported separately in `moon.pkg` or an `.mbtx` import block.
 
 **Structured-concurrency contract for `with_task_group`:**
 
-- When `with_task_group` returns, every task spawned in the group is guaranteed to have terminated — no orphan tasks, no resource leaks.
+- When `with_task_group` returns, every task spawned in the group has terminated. Tasks must still arrange cleanup of resources they acquire.
 - If any spawned task fails (and was spawned without `allow_failure=true`), the whole group fails: every other task in the group is cancelled, and the error propagates out of `with_task_group`.
-- Cancelled tasks are not considered failures; they raise a cancellation error but don't trigger peer cancellation.
+- Cancelled tasks are not ordinary failures and do not trigger peer cancellation. With async 0.22+, cancellation is a compiler signal, not a `suberror`.
+
+### Cancellation and Cleanup (async 0.22+)
+
+`catch` handles errors, not cancellation. Use `defer` for cleanup on every exit and `errdefer` for cleanup on error or cancellation. A catch-all used only for cleanup should be migrated accordingly.
+
+`noraise` does not mean non-cancellable: `@async.sleep` is `noraise` but can still be cancelled. `nocancel` is a separate effect; use `@async.protect_from_cancel` when cleanup must finish despite cancellation. `TaskGroup::add_defer` requires a `nocancel` callback.
+
+Use `@async.handle_cancellation` only when cancellation needs explicit handling. It returns `None` on cancellation without resetting the task's cancelled state. `@async.is_cancellation_error` is deprecated and always returns `false`; `with_cancellation_handler` is replaced by `handle_cancellation`. See the [async 0.22 migration notes](https://github.com/moonbitlang/async/releases/tag/v0.22.0).
 
 **Closure syntax for `spawn_bg` / `spawn`:**
 
@@ -836,7 +855,7 @@ suberror ValueError {
 
 ///|
 /// Tuple struct to hold position info
-struct Position(Int, Int) derive(ToJson, Debug, Eq)
+struct Position(Int32, Int32) derive(ToJson, Debug, Eq)
 
 ///|
 /// ParseError is subtype of Error
@@ -849,7 +868,7 @@ pub(all) suberror ParseError {
 
 ///|
 /// Functions declare what they can throw
-fn parse_int(s : String, position~ : Position) -> Int raise ParseError {
+fn parse_int(s : String, position~ : Position) -> Int32 raise ParseError {
   // 'raise' throws an error
   if s is "" {
     raise ParseError::InvalidEof(pos=position)
@@ -861,7 +880,7 @@ fn parse_int(s : String, position~ : Position) -> Int raise ParseError {
 
 ///|
 /// Declare a specific error type when callers should handle it precisely
-fn div(x : Int, y : Int) -> Int raise ValueError {
+fn div(x : Int32, y : Int32) -> Int32 raise ValueError {
   if y is 0 {
     raise ValueError::ValueError("Division by zero")
   }
@@ -887,7 +906,7 @@ test "expected failure handles the raised error" {
 
 ///|
 /// Propagate automatically
-fn use_parse(s : String, position~ : Position) -> Int raise ParseError {
+fn use_parse(s : String, position~ : Position) -> Int32 raise ParseError {
   // This plain call is the correct propagation syntax.
   // `try! parse_int(...)` would abort instead of propagating.
   let x = parse_int(s, position~) // label punning, equivalent to position=position
@@ -900,14 +919,14 @@ fn use_parse(s : String, position~ : Position) -> Int raise ParseError {
 
 ///|
 /// Use try! to abort if it raises, no raise in the signature 
-fn use_parse2(position~ : Position) -> Int {
+fn use_parse2(position~ : Position) -> Int32 {
   let x = try! parse_int("123", position~) // label punning
   x * 2
 }
 
 ///|
 /// Handle with try-catch
-fn handle_parse(s : String, position~ : Position) -> Int {
+fn handle_parse(s : String, position~ : Position) -> Int32 {
   parse_int(s, position~) catch {
     ParseError::InvalidEof(pos=_) => {
       println("Parse failed: InvalidEof")
@@ -931,15 +950,37 @@ Important: When calling a function that can raise errors, if you only want to
 propagate the error, you do not need any marker; the compiler infers it.
 Async functions automatically can raise errors without explicitly stating this. Do not add `raise` to async functions for propagation; add `noraise` only when the async function must reject unhandled errors.
 
+Use `SubErrorType::_ as err` to match all constructors of one error type and narrow an `Error` value to that subtype:
+
+```mbt check
+///|
+fn is_parse_error(error : Error) -> Bool {
+  match error {
+    ParseError::_ as err => {
+      let _ : ParseError = err
+      true
+    }
+    _ => false
+  }
+}
+
+///|
+test "matching an error subtype" {
+  assert_true(is_parse_error(ParseError::InvalidEof(pos=Position(0, 0))))
+  assert_false(is_parse_error(ValueError::ValueError("other")))
+}
+```
+
 ## Integer, Char and overloaded literals
 
-MoonBit supports `Byte`, `Int16`, `Int`, `UInt16`, `UInt`, `Int64`, `UInt64`, etc.
+MoonBit supports `Byte`, `Int16`, `Int32`, `UInt16`, `UInt32`, `Int64`, `UInt64`, etc.
+Use `Int32` and `UInt32` in new examples. The 2026-10-16 formatter canonicalizes the still-accepted aliases `Int` and `UInt` to these names.
 When the type is known, the literal can be overloaded:
 
 ```mbt check
 ///|
 test "integer and char literal overloading disambiguation via type in the current context" {
-  let (int, uint, uint16, int64, byte) : (Int, UInt, UInt16, Int64, Byte) = (
+  let (int, uint, uint16, int64, byte) : (Int32, UInt32, UInt16, Int64, Byte) = (
     1, 1, 1, 1, 1,
   )
   // The literal `1` is overloaded based on the expected type in the current context.
@@ -949,7 +990,7 @@ test "integer and char literal overloading disambiguation via type in the curren
   assert_eq(uint, 1U)
   assert_eq(int64, 1L)
   assert_eq(byte, b'\x01')
-  let (a1, a2, a3) : (Int, Char, UInt16) = ('b', 'b', 'b')
+  let (a1, a2, a3) : (Int32, Char, UInt16) = ('b', 'b', 'b')
   // char literal overloading, `a1` will be the unicode value of 'b', 
   // compile time error when the literal cannot be represented in the target type 
   // e.g, let a6 : UInt16 = '𐍈' // ❌ won't compile, '𐍈' is U+10348, which exceeds UInt16 max value 0xffff  
@@ -980,10 +1021,10 @@ test "bytes literals" {
 ///|
 test "array literals overloading: disambiguation via type in the current context" {
   let (a0, a1, a2, a3) : (
-    Array[Int],
-    FixedArray[Int],
-    ReadOnlyArray[Int],
-    ArrayView[Int],
+    Array[Int32],
+    FixedArray[Int32],
+    ReadOnlyArray[Int32],
+    ArrayView[Int32],
   ) = ([1, 2, 3], [1, 2, 3], [1, 2, 3], [1, 2, 3])
   // The literal `[1, 2, 3]` is overloaded based on the expected type in the current context.
   // Defaults to Array[_]
@@ -1002,7 +1043,7 @@ Since MoonBit supports char literal overloading, you can write code snippets lik
 test "string indexing and utf8 encode/decode" {
   let s = "hello world"
   let b0 : UInt16 = s[0]
-  guard b0 is ('\n' | 'h' | 'b' | 'a'..='z') && s is [.. "hello", .. rest] else {
+  guard b0 is ('\n' | 'h' | 'b' | 'a'..<='z') && s is [.. "hello", .. rest] else {
     fail("unexpected string content")
   }
   guard rest is " world" else { fail("unexpected string suffix") }
@@ -1011,12 +1052,12 @@ test "string indexing and utf8 encode/decode" {
 
   // Using get_char for Option handling
   let b1 : Char? = s.get_char(0)
-  assert_true(b1 is Some('a'..='z'))
+  assert_true(b1 is Some('a'..<='z'))
 
   // ⚠️ Important: Variables won't work with direct indexing
   let eq_char : Char = '='
   assert_false(s.get_char(0) == Some(eq_char))
-  // s[0] == eq_char // ❌ Won't compile - eq_char is not a literal, lhs is UInt while rhs is Char
+  // s[0] == eq_char // ❌ Won't compile - eq_char is not a literal, lhs is UInt16 while rhs is Char
   // Use: s[0] == '=' or s.get_char(0) == Some(eq_char)
   // Requires `"moonbitlang/core/encoding/utf8"` in `moon.pkg`.
   let bytes = @utf8.encode("中文")
@@ -1109,10 +1150,10 @@ test "multi-line string literals" {
 ///|
 test "map literals and common operations" {
   // Map literal syntax
-  let map : Map[String, Int] = { "a": 1, "b": 2, "c": 3 }
-  let empty : Map[String, Int] = Map([]) // Empty map
+  let map : Map[String, Int32] = { "a": 1, "b": 2, "c": 3 }
+  let empty : Map[String, Int32] = Map([]) // Empty map
   // From array of pairs
-  let from_pairs : Map[String, Int] = Map::from_array([("x", 1), ("y", 2)])
+  let from_pairs : Map[String, Int32] = Map::from_array([("x", 1), ("y", 2)])
   assert_true(empty.is_empty())
   inspect(from_pairs["x"], content="1")
 
@@ -1126,7 +1167,7 @@ test "map literals and common operations" {
   }
 
   // Direct access (panics if key missing)
-  let value : Int = map["a"] // value = 10
+  let value : Int32 = map["a"] // value = 10
   inspect(value, content="10")
 
   // Iteration preserves insertion order
@@ -1146,6 +1187,8 @@ test "map literals and common operations" {
 ## View Types
 
 **Key Concept**: View types (`StringView`, `BytesView`, `ArrayView[T]`) provide read-only access to a range without copying the underlying data. Parameters expecting a view can also accept the corresponding `String`, `Bytes`, or array via implicit conversion. The reverse conversion requires explicitly materializing the view.
+
+Array and byte slices also clamp their ranges: `[10, 20, 30][1:100]` contains `20, 30`, and a range starting past the end is empty. Use `exact_view` when invalid ranges should panic, or `get_view` when they should return `None`.
 
 - `String` → `StringView` via `s[:]` or `s[start:end]` or `s[start:]` or `s[:end]`
 - `Bytes` → `BytesView` via `b[:]` or `b[start:end]`, etc.
@@ -1189,7 +1232,7 @@ enum Tree[T] {
 } derive(Debug, ToJson) // derive traits for Tree
 
 ///|
-pub fn Tree::sum(tree : Tree[Int]) -> Int {
+pub fn Tree::sum(tree : Tree[Int32]) -> Int32 {
   match tree {
     Leaf(x) => x
     // we don't need to write Tree::Leaf, when `tree` has a known type
@@ -1199,12 +1242,12 @@ pub fn Tree::sum(tree : Tree[Int]) -> Int {
 
 ///|
 struct Point {
-  x : Int
-  y : Int
+  x : Int32
+  y : Int32
 } derive(Debug, ToJson) // derive traits for Point
 
 ///|
-pub fn Point::Point(x~ : Int, y~ : Int) -> Point {
+pub fn Point::Point(x~ : Int32, y~ : Int32) -> Point {
   { x, y, }
 }
 
@@ -1228,12 +1271,12 @@ test "user defined types: enum and struct" {
 ```mbt check
 ///|
 pub(all) enum SearchIndex {
-  Found(Int)
-  InsertionPoint(Int)
+  Found(Int32)
+  InsertionPoint(Int32)
 } derive(Debug, Eq)
 
 ///|
-pub fn binary_search(arr : ArrayView[Int], value : Int) -> SearchIndex {
+pub fn binary_search(arr : ArrayView[Int32], value : Int32) -> SearchIndex {
   let len = arr.length()
   // functional for loop:
   // initial state ; [predicate] ; [post-update] {
@@ -1260,7 +1303,7 @@ pub fn binary_search(arr : ArrayView[Int], value : Int) -> SearchIndex {
 
 ///|
 test "functional for loop control flow" {
-  let arr : Array[Int] = [1, 3, 5, 7, 9]
+  let arr : Array[Int32] = [1, 3, 5, 7, 9]
   debug_inspect(binary_search(arr, 5), content="Found(2)") // Array to ArrayView implicit conversion when passing as arguments
   debug_inspect(binary_search(arr, 6), content="InsertionPoint(3)")
   // for iteration is supported too
@@ -1277,19 +1320,21 @@ You are *STRONGLY ENCOURAGED* to use functional `for` loops instead of imperativ
 
 Good example: use labeled and optional parameters
 
+Use `label~ : T` for a required label, `label~ : T = default` for a defaulted label, and `label? : T` for an omitted argument represented as `T?`. The formatter rewrites the older defaulted `label? : T = default` spelling to `label~ : T = default`.
+
 ```mbt check
 ///|
 fn g(
-  positional : Int,
-  required~ : Int,
-  optional? : Int, // no default => Option
-  optional_with_default? : Int = 42, // default => plain Int
+  positional : Int32,
+  required~ : Int32,
+  optional? : Int32, // no default => Option
+  optional_with_default~ : Int32 = 42, // default => plain Int32
 ) -> String {
   // These are the inferred types inside the function body.
-  let _ : Int = positional
-  let _ : Int = required
-  let _ : Int? = optional
-  let _ : Int = optional_with_default
+  let _ : Int32 = positional
+  let _ : Int32 = required
+  let _ : Int32? = optional
+  let _ : Int32 = optional_with_default
   // `Repr` renders Option without relying on its deprecated `Show` implementation.
   "\{positional},\{required},\{Repr(optional)},\{optional_with_default}"
 }
@@ -1307,7 +1352,7 @@ Callers still must pass it (as `None`/`Some(...)`).
 
 ```mbt check
 ///|
-fn with_config(a : Int?, b : Int?, c : Int) -> String {
+fn with_config(a : Int32?, b : Int32?, c : Int32) -> String {
   "\{Repr(a)},\{Repr(b)},\{c}"
 }
 
@@ -1319,20 +1364,20 @@ test {
 ```
 
 Anti-pattern: `arg? : Type?` (no default => double Option).
-If you want a defaulted optional parameter, write `b? : Int = 1`, not `b? : Int? = Some(1)`.
+If you want a defaulted optional parameter, write `b~ : Int32 = 1`, not `b~ : Int32? = Some(1)`.
 
 ```mbt check
 ///|
-fn f_misuse(a? : Int?, b? : Int = 1) -> Unit {
-  let _ : Int?? = a // rarely intended
-  let _ : Int = b
+fn f_misuse(a? : Int32?, b~ : Int32 = 1) -> Unit {
+  let _ : Int32?? = a // rarely intended
+  let _ : Int32 = b
 }
-// How to fix: declare `(a? : Int, b? : Int = 1)` directly.
+// How to fix: declare `(a? : Int32, b~ : Int32 = 1)` directly.
 
 ///|
-fn f_correct(a? : Int, b? : Int = 1) -> Unit {
-  let _ : Int? = a
-  let _ : Int = b
+fn f_correct(a? : Int32, b~ : Int32 = 1) -> Unit {
+  let _ : Int32? = a
+  let _ : Int32 = b
 }
 
 ///|
@@ -1350,12 +1395,12 @@ Bad example: `arg : APIOptions` (use labeled optional parameters instead)
 ///|
 /// Do not use struct to group options.
 struct APIOptions {
-  width : Int?
-  height : Int?
+  width : Int32?
+  height : Int32?
 }
 
 ///|
-fn not_idiomatic(opts : APIOptions, arg : Int) -> Int {
+fn not_idiomatic(opts : APIOptions, arg : Int32) -> Int32 {
   opts.width.unwrap_or(arg) * opts.height.unwrap_or(arg)
 }
 
