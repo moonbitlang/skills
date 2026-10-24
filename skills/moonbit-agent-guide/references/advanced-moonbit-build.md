@@ -25,15 +25,34 @@ options(
 
 ## Link Configuration
 
-### Basic Linking
+### Package Type and Exports
 
-Enable linking with `options(link: true)`, or configure individual backends:
+Declare `pkgtype(kind: "foreign_library")` in `moon.pkg` when exporting functions for a foreign host. Use `pkgtype(kind: "executable")` for a program with `main`; `library` is the default for ordinary MoonBit packages. Choose one kind per package. The old `options(link: true)` and `options("is-main": true)` forms are legacy.
+
+Prefer `#export_name` for new exports:
+
+```moonbit
+pkgtype(kind: "foreign_library")
+```
+
+```mbt nocheck
+///|
+#export_name("increment")
+pub fn increment(value : Int32) -> Int32 {
+  value + 1
+}
+```
+
+The exported function must be public, non-generic, and have no optional parameters. Export names currently must be unique C identifiers, even for Wasm and JavaScript. Exports belong to the artifact-producing package: wrap dependency functions there if they must be exported. Native static/shared library output is not currently supported; validate foreign-library artifacts on Wasm or JavaScript.
+
+### Backend Link Options
+
+Keep backend-specific settings in `options(link: { ... })`. This object configures linking rather than selecting the package type. Legacy `exports` lists remain supported, but use `#export_name` for new exports.
 
 ```moonbit
 options(
   link: {
     "wasm": {
-      "exports": ["hello", "foo:bar"], // Export functions
       "heap-start-address": 1024, // Memory layout
       "import-memory": {
         // Import external memory
@@ -43,12 +62,10 @@ options(
       "export-memory-name": "memory" // Export memory with name
     },
     "wasm-gc": {
-      "exports": ["hello"],
       "use-js-builtin-string": true, // JS String Builtin support
       "imported-string-constants": "_" // String namespace
     },
     "js": {
-      "exports": ["hello"],
       "format": "esm" // "esm", "cjs", or "iife"
     },
     "native": {
