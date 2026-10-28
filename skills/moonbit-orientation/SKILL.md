@@ -1,9 +1,11 @@
 ---
 name: moonbit-orientation
-description: Use this skill when the user needs help solving MoonBit language, code, compiler diagnostic, package, toolchain, backend, FFI, test, or "does MoonBit have X?" questions. Use it even when MoonBit is only implied by .mbt files, moon.mod.json, moon.pkg.json, moon commands, wasm/js/native targets, or mooncakes packages. This skill helps choose the right MoonBit source of truth, discover APIs with moon ide, avoid stale assumptions, and validate fixes.
+description: Use this skill when the user needs help solving MoonBit language, code, compiler diagnostic, package, toolchain, backend, FFI, test, or "does MoonBit have X?" questions. Use it even when MoonBit is only implied by .mbt files, moon.mod/moon.pkg manifests (or legacy moon.mod.json/moon.pkg.json), moon commands, wasm/js/native targets, or mooncakes packages. This skill helps choose the right MoonBit source of truth, discover APIs with moon ide, avoid stale assumptions, and validate fixes.
 ---
 
 # MoonBit Orientation
+
+> Validated 2026-10-28 against moon 0.1.20261023 / moonc v0.10.17+d971670cd by live toolchain probes. Key refreshed facts: manifests are now `moon.mod`/`moon.pkg` (legacy `.json` forms are hard-rejected — "is no longer supported. Run `moon fmt` to migrate"), `llvm` builds fail on stable with "toolchain is incomplete: missing `prelude.mi`", and diagnostics explain via both `moon check --explain` and the `moon explain --diagnostic` command.
 
 Use this skill to solve MoonBit developer questions by identifying the missing
 context first. This is an orientation skill, not a bundled copy of all MoonBit
@@ -71,14 +73,21 @@ out.
   technology name. Check mooncakes or `moon add <candidate>` in a disposable or
   user project before naming a dependency as available.
 - `llvm` is nightly-only. Stable backend guidance should use `wasm`, `wasm-gc`,
-  `js`, or `native`; `--target all` excludes `llvm`.
+  `js`, or `native`; `--target all` excludes `llvm`. Verified on the stable
+  toolchain (0.1.20261023): `moon build --target llvm` fails with
+  "toolchain is incomplete: missing `prelude.mi` for target `llvm`" — the llvm
+  core ships with the nightly channel.
 - Do not answer exact API names by translating from Rust, Go, JavaScript, or
   OCaml names. Discover the MoonBit API first.
 - Do not send users to "the docs" without a concrete URL or command.
-- Local `moon.mod.json` and `moon.pkg.json` beat generic advice for package
-  names, imports, targets, and dependencies.
-- For `E####` diagnostics, use `moon check --explain` or the exact online error
-  page pattern before inventing a cause.
+- Local `moon.mod` and `moon.pkg` beat generic advice for package
+  names, imports, targets, and dependencies. Legacy `moon.mod.json`/`moon.pkg.json`
+  are no longer accepted by current toolchains (verified 0.1.20261023: hard error
+  "... is no longer supported. Run `moon fmt` to migrate") — treat that error as a
+  migration gate, not an environment fault.
+- For `E####` diagnostics, use `moon check --explain` (renders explanations inline),
+  the dedicated `moon explain --diagnostic <code|mnemonic>` command (verified
+  0.1.20261023), or the exact online error page pattern before inventing a cause.
 
 ## Verification contract
 

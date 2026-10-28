@@ -8,14 +8,16 @@ Use this file before fixing compiler, package, test, or backend failures.
 2. Identify whether the failure comes from `moonc`, `moon`, tests, dependency
    resolution, generated docs, or backend output.
 3. Fix the earliest root-cause diagnostic first; later diagnostics may cascade.
-4. Inspect local `moon.mod.json`, `moon.pkg.json`, imports, and touched files.
+4. Inspect local `moon.mod`, `moon.pkg`, imports, and touched files.
 5. Re-run the narrowest command that reproduces the failure.
 
 ## Error codes
 
 - If the diagnostic includes `E####`, consult the exact error-code docs when
   available.
-- Use `moon check --explain` when available.
+- Use `moon check --explain` when available, or the dedicated command
+  `moon explain --diagnostic <code|mnemonic>` (verified 0.1.20261023) for a
+  standalone explanation with an erroneous example.
 - Use the online error index at
   <https://docs.moonbitlang.com/en/latest/language/error_codes/index.html>.
 - For a specific code, use the URL pattern
@@ -36,8 +38,8 @@ Use this file before fixing compiler, package, test, or backend failures.
 
 ## Package and dependency errors
 
-- Inspect module-level dependencies in `moon.mod.json`.
-- Inspect package imports and backend settings in `moon.pkg.json`.
+- Inspect module-level dependencies in `moon.mod`.
+- Inspect package imports and backend settings in `moon.pkg`.
 - Use `moon tree`, `moon add`, `moon remove`, `moon install`, or `moon update`
   only after confirming the intended dependency change.
 - If generated interfaces are stale, `moon info` can help inspect public APIs.

@@ -100,8 +100,8 @@ Common examples:
 
 ## Backend or target behavior
 
-1. Inspect `moon.mod.json` for `preferred-target` and `supported-targets`.
-2. Inspect `moon.pkg.json` for package-level targets, imports, and backend
+1. Inspect `moon.mod` for `preferred-target` and `supported-targets`.
+2. Inspect `moon.pkg` for package-level targets, imports, and backend
    conditions.
 3. Treat stable targets as `wasm`, `wasm-gc`, `js`, and `native`.
 4. Treat `llvm` as nightly-only; do not recommend it unless the user is
@@ -119,8 +119,8 @@ Common examples:
 
 ## Project layout or package configuration
 
-1. Find `moon.mod.json` to identify the module root.
-2. Find relevant `moon.pkg.json` files for package imports and targets.
+1. Find `moon.mod` to identify the module root.
+2. Find relevant `moon.pkg` files for package imports and targets.
 3. Use `moon ide outline <file-or-directory>` to inspect structure before broad
    edits.
 4. Use `moon ide peek-def <symbol>` before changing calls to unfamiliar local

@@ -4,8 +4,8 @@ Use local project files as source of truth before changing commands or config.
 
 ## Project files
 
-- `moon.mod.json`: module-level metadata and dependencies.
-- `moon.pkg.json`: package-level imports, targets, build settings, and test
+- `moon.mod`: module-level metadata and dependencies (new DSL format; legacy `moon.mod.json` is no longer accepted — migrate with `moon fmt`).
+- `moon.pkg`: package-level imports, targets, build settings, and test
   related settings.
 - Workspace configuration may affect multiple packages or modules. Inspect the
   repository layout before assuming a single-package project.

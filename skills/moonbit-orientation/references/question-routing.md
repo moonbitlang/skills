@@ -46,7 +46,7 @@ coverage, build targets, and publishing.
 
 - Load `toolchain-map.md`.
 - Use `lookup-recipes.md` for backend, package, and project-layout checks.
-- Inspect `moon.mod.json`, `moon.pkg.json`, and workspace layout if local files
+- Inspect `moon.mod`, `moon.pkg`, and workspace layout if local files
   exist.
 - Distinguish module-level, package-level, and workspace-level configuration.
 

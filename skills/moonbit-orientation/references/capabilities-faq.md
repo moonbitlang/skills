@@ -80,8 +80,8 @@ Common direct answers:
 - MoonBit has a `moon` build system with commands for creating modules, checking,
   building, running, testing, formatting, docs, dependencies, benchmarks, and
   coverage.
-- MoonBit has modules, packages, and workspaces. Use local `moon.mod.json` and
-  `moon.pkg.json` files as the source of truth for a project.
+- MoonBit has modules, packages, and workspaces. Use local `moon.mod` and
+  `moon.pkg` files as the source of truth for a project.
 - MoonBit has IDE support, including VSCode support and `moon ide`.
 - MoonBit has package registry and API documentation at <https://mooncakes.io/>.
 
