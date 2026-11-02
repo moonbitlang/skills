@@ -16,7 +16,7 @@ practical and verify project-local conventions before changing code.
 
 - Check package boundaries before adding public definitions.
 - Avoid duplicating a helper if a local package already exposes the concept.
-- Do not invent imports or dependency names. Inspect `moon.pkg.json` and API
+- Do not invent imports or dependency names. Inspect `moon.pkg` and API
   docs.
 - When adding public APIs, consider whether `moon info` should be run to inspect
   the exposed interface.

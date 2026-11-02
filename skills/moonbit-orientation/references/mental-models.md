@@ -5,7 +5,7 @@ comparison short, then show the MoonBit way.
 
 ## From Go
 
-- Think modules and packages, but inspect `moon.mod.json` and `moon.pkg.json`
+- Think modules and packages, but inspect `moon.mod` and `moon.pkg`
   instead of assuming Go module layout.
 - Prefer explicit data types plus functions, methods, and traits over interface
   substitution patterns copied from Go.
