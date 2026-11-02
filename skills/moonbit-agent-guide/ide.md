@@ -9,10 +9,12 @@
 - `moon ide doc <query>`: Search API docs and symbols.
 - `moon ide peek-def <symbol> [--loc path[:line[:col]]]`: Show definition context for a symbol.
 - `moon ide find-references <symbol> [--loc path[:line[:col]]]`: Find usages of a symbol.
-- `moon ide rename <symbol> <new_name> [--loc path[:line[:col]]]`: Rename a symbol semantically.
+- `moon ide rename <symbol> <new_name> [--loc path[:line[:col]]]`: Preview semantic rename edits; add `--apply` to rewrite files.
 - `moon ide hover <symbol> --loc path:line[:col]`: Show type/doc info at a location.
 - `moon ide outline <dir|file>`: List top-level symbols in a package/file.
 - `moon ide analyze [path]`: Show public API usage summary of a package/module.
+- `moon ide workspace-symbols <query> --json`: Search top-level workspace symbols.
+- `moon ide codelens <file> --json`: Show reference counts for a file.
 
 ## Practical Examples
 
@@ -28,6 +30,8 @@ moon ide find-references TranslationUnit
 # Resolve ambiguous symbol by location
 moon ide peek-def parse --loc src/parser.mbt:42:8
 moon ide rename parse parse_expr --loc src/parser.mbt:42:8
+# Apply the reviewed rename
+moon ide rename parse parse_expr --loc src/parser.mbt:42:8 --apply
 
 # Type/doc hover and package outline
 moon ide hover filter --loc hover.mbt:14
