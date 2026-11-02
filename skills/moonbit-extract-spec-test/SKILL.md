@@ -5,6 +5,8 @@ description: Extract formal spec and comprehensive test suites from existing Moo
 
 # MoonBit Extract Spec & Test
 
+> Validated 2026-10-27 against moon 0.1.20261023 / moonc v0.10.17+d971670cd by compiling and running a full spec + implementation + black-box/white-box test project. Key toolchain facts baked in below: `try?` removed, `derive(Show)` deprecated, `raise`-style signatures preferred over `Result[T, Error]`, and `@pkg.`-prefix requirements in black-box tests.
+
 ## Overview
 
 Reverse-engineer a formal API contract (`<pkg>_spec.mbt`) and comprehensive test suites from an existing MoonBit implementation. This enables spec-driven testing for already-written code.
@@ -40,7 +42,8 @@ Reverse-engineer a formal API contract (`<pkg>_spec.mbt`) and comprehensive test
 
 - Use the `declare` keyword for all public functions/types
 - Preserve exact type signatures from implementation
-- Include error types with `derive(Show, Eq, ToJson)` for testability
+- Include error types with `derive(Debug, Eq, ToJson)` for testability — `derive(Show)` is deprecated (warning `deprecated_syntax`); use `Debug` + `debug_inspect()` for diagnostic output
+- Prefer `T raise E` signatures for failable APIs; the toolchain warns `result_error_return` for `Result[T, E]` where `E` is an error type — keep `Result` only when success/failure must flow as ordinary data
 - Add documentation comments from original code
 - Declarations with `declare` do not have a body
 - Use `pub(all)` for types that need construction in tests
@@ -54,7 +57,7 @@ Reverse-engineer a formal API contract (`<pkg>_spec.mbt`) and comprehensive test
 pub(all) suberror ParseError {
   InvalidFormat(String)
   UnexpectedEof
-} derive(Show, Eq, ToJson)
+} derive(Debug, Eq, ToJson)
 
 ///|
 /// Main data type
@@ -66,7 +69,7 @@ declare pub fn Toml::to_test_json(self : Toml) -> Json
 
 ///|
 /// Parse TOML from string
-declare pub fn parse(input : StringView) -> Result[Toml, ParseError]
+declare pub fn parse(input : StringView) -> Toml raise ParseError
 ```
 
 ### 3. Extract and Organize Test Cases
@@ -88,7 +91,7 @@ declare pub fn parse(input : StringView) -> Result[Toml, ParseError]
 
 ### 4. Write Spec-Driven Tests
 
-**For valid input tests:**
+**For valid input tests** — call raising functions directly: a `test` block propagates errors by default, so an unexpected raise fails the test with the actual error (no `try?`-style wrapper needed):
 
 ```mbt
 ///|
@@ -96,17 +99,14 @@ test "valid/category/test-name" {
   let toml_text =
     #|key = "value"
     #|
-  let toml = match @pkg.parse(toml_text) {
-    Ok(toml) => toml
-    Err(error) => fail("Failed to parse: " + error.to_string())
-  }
+  let toml = @pkg.parse(toml_text)
   json_inspect(toml.to_test_json(), content={
     "key": { "type": "string", "value": "value" }
   })
 }
 ```
 
-**For invalid input tests:**
+**For invalid input tests** — use `try ... catch ... noraise`, matching suberror variants exhaustively (a non-exhaustive `catch` is error `partial_match`):
 
 ```mbt
 ///|
@@ -114,15 +114,16 @@ test "invalid/category/test-name" {
   let toml_text =
     #|invalid syntax here
     #|
-  match @pkg.parse(toml_text) {
-    Ok(toml) => {
-      let json = toml.to_test_json()
-      fail("Expected parse to fail, got \{json.stringify(indent=2)}")
-    }
-    Err(_) => ()
+  try @pkg.parse(toml_text) catch {
+    @pkg.ParseError::InvalidFormat(_) => ()  // expected
+    @pkg.ParseError::UnexpectedEof => ()     // expected
+  } noraise {
+    toml => fail("Expected parse to fail, got \{toml.to_test_json().stringify(indent=2)}")
   }
 }
 ```
+
+Note: in black-box test files (`*_test.mbt`) every referenced symbol — including suberror constructors in patterns — needs the `@pkg.` prefix; unqualified use triggers the `test_unqualified_package` warning.
 
 ### 5. Validate
 
@@ -131,6 +132,8 @@ test "invalid/category/test-name" {
 ```bash
 moon check
 ```
+
+Verified semantics of the spec-only state (moon 0.1.20261023 / moonc v0.10.17): unimplemented `declare`s emit the `declaration_unimplemented` **warning** (spec-only check still exits 0), but **using** an unimplemented declaration anywhere (including tests) is a hard error (exit 1). Implement the declarations in a separate file until the warnings disappear.
 
 **Run the tests:**
 
@@ -178,7 +181,11 @@ moon test -u       # Update snapshot tests
 ```mbt
 pub type Config
 
-pub fn Config::parse(text : String) -> Result[Config, String] {
+pub(all) suberror ConfigError {
+  BadLine(String)
+} derive(Debug, Eq)
+
+pub fn Config::parse(text : String) -> Config raise ConfigError {
   // implementation
 }
 
@@ -194,7 +201,7 @@ pub fn Config::get_value(self : Config, key : String) -> String? {
 declare pub type Config
 
 ///|
-declare pub fn Config::parse(text : String) -> Result[Config, String]
+declare pub fn Config::parse(text : String) -> Config raise ConfigError
 
 ///|
 declare pub fn Config::get_value(self : Config, key : String) -> String?
@@ -202,27 +209,26 @@ declare pub fn Config::get_value(self : Config, key : String) -> String?
 
 ### To Tests
 
+Black-box tests import the package under test and use the `@pkg.` alias for every symbol:
+
 ```mbt
 ///|
 test "parse valid config" {
-  let result = try? Config::parse("key=value")
-  match result {
-    Ok(cfg) => {
-      inspect(cfg.get_value("key"), content="Some(\"value\")")
-    }
-    Err(e) => fail("Parse failed: \{e}")
-  }
+  let cfg = @config.Config::parse("key=value")
+  inspect(cfg.get_value("key"), content="Some(value)")
 }
 
 ///|
 test "parse invalid config returns error" {
-  let result = try? Config::parse("invalid")
-  match result {
-    Ok(_) => fail("Should have failed to parse")
-    Err(_) => ()
+  try @config.Config::parse("invalid") catch {
+    @config.ConfigError::BadLine(line) => inspect(line, content="invalid")
+  } noraise {
+    _ => fail("Should have failed to parse")
   }
 }
 ```
+
+(`inspect` renders `Option[String]` as `Some(value)` — String payloads are unquoted in current `inspect` output; prefer `debug_inspect` on types that `derive(Debug)` when exact quoting matters.)
 
 ## Tips
 
@@ -234,22 +240,36 @@ test "parse invalid config returns error" {
 
 ## Common Patterns
 
-### Testing with Result types
+> **`try?` has been removed from the language** (parse error on moonc v0.10.17 with an explicit replacement hint). Use the patterns below instead.
+
+### Testing expected success — call raising functions directly
 
 ```mbt
-let result : Result[T, Error] = try? function_call(...)
-match result {
-  Ok(value) => inspect(value, content="...")
-  Err(e) => fail("Unexpected error: \{e}")
+test "call directly" {
+  let value = function_call(...)  // unexpected raise fails the test with the actual error
+  inspect(value, content="...")
 }
 ```
 
-### Testing expected failures
+### Testing expected failures — `try`/`catch`/`noraise`
 
 ```mbt
-match try? function_call(...) {
-  Ok(v) => fail("Expected error, got \{v}")
-  Err(_) => ()  // Success - error was expected
+try function_call(...) catch {
+  @pkg.ErrorVariant(payload) => inspect(payload, content="...")  // expected error
+} noraise {
+  v => fail("Expected error, got \{Repr(v)}")
+}
+```
+
+The `catch` must be exhaustive over the raised error type (else `partial_match`).
+
+### Result-as-data — when the API genuinely returns `Result`
+
+```mbt
+let result = try Ok(function_call(...)) catch { e => Err(e) }
+match result {
+  Ok(value) => inspect(value, content="...")
+  Err(e) => fail("Unexpected error: \{Repr(e)}")
 }
 ```
 
