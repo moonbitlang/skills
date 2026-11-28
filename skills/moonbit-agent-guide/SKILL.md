@@ -5,7 +5,7 @@ description: Guide for writing, refactoring, and testing MoonBit projects, inclu
 
 # MoonBit Task Checklist
 
-- Check `moon version --all` and the project's dependency versions before applying migration advice. This guide was validated with moon/moonc 2026-10-16 (moonc v0.10.16); async cancellation guidance below applies to `moonbitlang/async` 0.22 and later.
+- Check `moon version --all` and the project's dependency versions before applying migration advice. The script examples use MoonBit 1.0 RC1 and its bundled core async packages.
 - Locate the enclosing `moon.mod` and relevant `moon.pkg` files before editing.
 - Discover APIs with `moon ide doc`; use `outline`, `peek-def`, `find-references`, `hover`, and `rename` for semantic navigation and refactoring.
 - Use `.mbtx` exclusively for agent-authored automation; keep automation logic out of shell scripts and other scripting languages.
@@ -119,16 +119,14 @@ my_module
 - **Don't use ++ or -- (not supported)** - use `i = i + 1` or `i += 1`
 - **Don't add explicit `try` for error propagation** - inside a `raise` function, call error-raising functions normally; use `catch` to handle locally and `try!` only when aborting is intended
 - **Legacy syntax**: Legacy code may use `function_name!(...)` or `function_name(...)?` - these are deprecated; use normal calls for propagation.
-- **Don't write an empty parameter list for `main`** - use `fn main { ... }` or `fn main raise { ... }`, not `fn main() { ... }` or `fn main() raise ... { ... }`
 - **Don't write record-style enum or error constructor fields** - labeled constructor fields use `label~ : Type`, e.g. `InvalidNumber(input~ : String)`, not `InvalidNumber(input: String)`
 - **Prefer range `for` loops over C-style** - `for i in 0..<(n-1) {...}` and `for j in 0..=6 {...}` are more idiomatic in MoonBit
 - **Don't use `for { ... }` for infinite loops** - write `for ;; { ... }` instead
-- **Don't `derive(Show)` for debugging** - derive `Debug` and use `debug_inspect()` for test/diagnostic output (`\{Repr(value)}` for interpolation of composed values). Reserve a manual `impl Show` for specialized display formats (JSON, XML, domain text)
+- **Don't `#derive(Show)` for debugging** - derive `Debug` and use `debug_inspect()` for test/diagnostic output (`\{Repr(value)}` for interpolation of composed values). Reserve a manual `impl Show` for specialized display formats (JSON, XML, domain text)
 - **Don't call `@json.inspect()`** - use the prelude `json_inspect(value, ...)` without a package prefix
 - **JavaScript FFI**: use `FixedArray[T]` at JavaScript array boundaries. The JavaScript representation of resizable `Array[T]` is not a stable FFI contract.
 - **Async** - MoonBit has no `await` keyword; do not add it. Async functions default to raising, so do not add `raise`; add `noraise` only when the async body must not raise.
-  Async functions and tests are characterized by those which call other async functions.
-  To identify a function or test as async, simply add the `async` prefix (e.g. `[pub] async fn ...`, `async test ...`).
+  Write `fn main` for the entry point. Use `async fn` for other named functions that call async APIs and `async test` for async tests.
 
 # `moon` Essentials
 
@@ -139,30 +137,21 @@ conditionals, parsing, transformation, and process orchestration in MoonBit
 instead of shell scripts or another scripting language. The outer shell should
 only launch the script or run a direct, single-purpose command.
 
-An `.mbtx` file is an optional `import { ... }` block followed by ordinary
-MoonBit code, including a `main` function. Run it directly with:
+Write `fn main { ... }`. MoonBit 1.0 infers its `async` and `raise` effects from
+the body. Put any imports between `----` lines at the top of the script.
+Run the file directly with `moonx`.
 
 ```bash
-moon run path/to/script.mbtx [args...]
+moonx path/to/script.mbtx [args...]
 ```
 
-Choose `main` by the effects the script actually uses:
-
-- `fn main { ... }` is synchronous and does not propagate errors.
-- `fn main raise { ... }` is synchronous and may propagate checked errors.
-- `async fn main { ... }` is for scripts that call async APIs. Import
-  `"moonbitlang/async"`; do not add `raise` or `await`.
-
-All three work on the default Wasm target. Do not mark a purely synchronous
-script `async`; MoonBit reports `unused_async`.
-
-When automation runs commands, import `"moonbitlang/async/shell"` and use
-`@shell.Cmd` or `@shell.Pipeline`. They keep the executable and arguments
+When automation runs commands, import `"moonbitlang/core/async/process"` and use
+`@process.Cmd` or `@process.spawn`. They keep the executable and arguments
 separate and never invoke a shell, so characters such as `|`, `$()`, and `*`
 are passed literally. Use ordinary MoonBit control flow instead of `&&`, shell
 loops, or command substitution.
 
-Script mode defaults to Wasm. Supplying `--wasm-policy policy.json` enables
+With `moonx`, scripts run on Wasm. Supplying `--experimental-policy policy.json` enables
 deny-by-default control over MoonBit host APIs; grant only the required
 filesystem, environment, network, or process access. For process automation,
 prefer a narrow `process.allow` rule with an exact program and argument prefix
@@ -173,6 +162,7 @@ they are not trusted.
 Minimal script (`hello.mbtx`):
 
 ```mbtx
+///|
 fn main {
   println("Hello from MoonBit script mode")
 }
@@ -181,12 +171,15 @@ fn main {
 Command-line automation (`sum_args.mbtx`):
 
 ```mbtx
+----
 import {
   "moonbitlang/core/env",
   "moonbitlang/core/string",
 }
+----
 
-fn main raise {
+///|
+fn main {
   let args = @env.args()
   for arg in args[1:]; total = 0 {
     continue total + @string.parse_int(arg)
@@ -196,16 +189,19 @@ fn main raise {
 }
 ```
 
-Running `moon run sum_args.mbtx 10 20 12` prints `42`.
+Running `moonx sum_args.mbtx 10 20 12` prints `42`.
 
 Package imports work directly in the script header (`format_json.mbtx`):
 
 ```mbtx
+----
 import {
   "moonbitlang/core/json",
 }
+----
 
-fn main raise {
+///|
+fn main {
   let source =
     #|{
     #|  "project": "moonbit",
@@ -216,15 +212,17 @@ fn main raise {
 }
 ```
 
-Async automation works on the default Wasm target. For example, run
-`moon run async_job.mbtx` for:
+Run this timer example with `moonx async_job.mbtx`.
 
 ```mbtx
+----
 import {
-  "moonbitlang/async",
+  "moonbitlang/core/async",
 }
+----
 
-async fn main {
+///|
+fn main {
   @async.sleep(10)
   println("async automation complete")
 }
@@ -234,7 +232,7 @@ async fn main {
 
 - `moon new my_project` - Create new project
 - `moon run cmd/main` - Run main package
-- `moon run - < hello.mbtx` - Run script code from stdin (useful for quick experiments)
+- `moon run -` - Read script code from stdin
 - `moon run -e "code snippet"` - Run code from command line argument (good for one-liners)
   ```
   moon run -e 'fn main { println("Hello, MoonBit!") }'
@@ -247,21 +245,29 @@ async fn main {
 - `moon check --target all` - Type check for all backends
   Process structured diagnostics with a saved `.mbtx` script rather than a
   shell pipeline or another scripting language. For example, save this as
-  `filter_diagnostics.mbtx`; `@shell.Cmd::each_line` runs `moon check` directly,
-  streams its JSON output, and returns its exit status:
+  `filter_diagnostics.mbtx` to stream the JSON output of `moon check` and print
+  each path with a warning once.
   ```mbtx
+----
 import {
-  "moonbitlang/async",
-  "moonbitlang/async/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/process",
   "moonbitlang/core/json",
 }
+----
 
-async fn main {
-  let seen : Map[String, Unit] = Map([])
-  let exit_code = @shell.Cmd(
-    "moon",
-    ["check", "--target", "all", "--output-json"],
-  ).each_line(line => {
+///|
+fn main {
+  @async.with_task_group(group => {
+    let child = @process.spawn(
+      group,
+      "moon",
+      ["check", "--target", "all", "--output-json"],
+      stdout=Collect,
+    )
+    defer child.stdout.close()
+    let seen : Map[String, Unit] = Map([])
+    while child.stdout.text.read_line() is Some(line) {
       try @json.parse(line) catch {
         _ => ()
       } noraise {
@@ -272,15 +278,19 @@ async fn main {
           }
         _ => ()
       }
-    })
-  if exit_code != 0 {
-    fail("moon check exited with code \{exit_code}")
-  }
+    }
+    let exit_code = child.wait()
+    if exit_code != 0 {
+      fail("moon check exited with code \{exit_code}")
+    }
+  })
 }
   ```
-  Run it with a policy that allows that command prefix:
+  Save the following as `moon-check-policy.json`. It lets the child locate the
+  toolchain and allows the command prefix used above.
   ```json
   {
+    "env": { "from_host": ["PATH", "HOME", "MOON_HOME"] },
     "process": {
       "allow": [
         {
@@ -292,7 +302,7 @@ async fn main {
   }
   ```
   ```bash
-  moon run --wasm-policy moon-check-policy.json filter_diagnostics.mbtx
+  moonx --experimental-policy moon-check-policy.json filter_diagnostics.mbtx
   ```
 - `moon explain` - Show built-in documentation for compiler diagnostics and language topics.
   - `moon explain --diagnostic` lists warning mnemonics and IDs.
@@ -727,58 +737,60 @@ For more advanced topics like `conditional compilation`, `link configuration`, `
 
 ## Async IO
 
-Asynchronous programming uses compiler support plus the `moonbitlang/async`
-runtime. `async fn main` works on the default Wasm target as well as native when
-the runtime is imported. Individual host I/O APIs may still be target-specific;
+MoonBit 1.0 bundles `moonbitlang/core/async`. Projects pinned to an
+older core without this package can use the standalone `moonbitlang/async` module.
+Import the async runtime for an entry point that calls async APIs on Wasm or native.
+Individual host I/O APIs may still be target-specific;
 use `moon ide doc "@async"` and validate on the intended target.
 
 User-facing subpackages include `@async` (tasks, timers, cancellation),
-`@async/aqueue`, `@async/fs`, `@async/shell` (shell-free process orchestration),
+`@async/aqueue`, `@async/fs`, `@async/process` (shell-free process orchestration),
 `@async/stdio`, and `@async/websocket`.
 Each must be imported separately in `moon.pkg` or an `.mbtx` import block.
 
-1. Add the dependency with `moon add moonbitlang/async`.
-2. In the executable's `moon.pkg`, declare the package type and import what you need:
+1. In the executable's `moon.pkg`, declare the package type and import what you need:
    ```
    import {
-     "moonbitlang/async",
-     "moonbitlang/async/stdio",
+     "moonbitlang/core/async",
+     "moonbitlang/core/async/stdio",
    }
    pkgtype(kind: "executable")
+   options("allow-experimental-packages": true)
    ```
-3. Define `async fn main` (not `fn main`). Spawn concurrent tasks via `with_task_group` for structured concurrency:
+   The option acknowledges experimental core packages. Standalone scripts can run with the experimental-package warning.
+2. Use `with_task_group` inside `fn main` to run tasks concurrently.
    ```mbt nocheck
    ///|
-   async fn main {
+   fn main {
      @async.with_task_group(group => {
        group.spawn_bg(() => {
          @async.sleep(50)
-         @stdio.stdout.write("A\n")
+         @stdio.stdout.text.write("A\n")
        })
        group.spawn_bg(() => {
          @async.sleep(20)
-         @stdio.stdout.write("B\n")
+         @stdio.stdout.text.write("B\n")
        })
      })
    }
    ```
 
-- Async functions have a raising effect by default. Write `async fn main { ... }` or `async fn f(...) { ... }`, not `async fn main raise { ... }`.
+- Async functions such as `async fn f(...) { ... }` can raise by default.
 - Use `async fn f(...) noraise { ... }` only when the async body must not raise. A `noraise` async function cannot call fallible APIs unless it handles their errors locally.
 
 **Structured-concurrency contract for `with_task_group`:**
 
 - When `with_task_group` returns, every task spawned in the group has terminated. Tasks must still arrange cleanup of resources they acquire.
 - If any spawned task fails (and was spawned without `allow_failure=true`), the whole group fails: every other task in the group is cancelled, and the error propagates out of `with_task_group`.
-- Cancelled tasks are not ordinary failures and do not trigger peer cancellation. With async 0.22+, cancellation is a compiler signal, not a `suberror`.
+- Cancelled tasks are not ordinary failures and do not trigger peer cancellation. In core async, cancellation is a compiler signal, not a `suberror`.
 
-### Cancellation and Cleanup (async 0.22+)
+### Cancellation and Cleanup
 
 `catch` handles errors, not cancellation. Use `defer` for cleanup on every exit and `errdefer` for cleanup on error or cancellation. A catch-all used only for cleanup should be migrated accordingly.
 
 `noraise` does not mean non-cancellable: `@async.sleep` is `noraise` but can still be cancelled. `nocancel` is a separate effect; use `@async.protect_from_cancel` when cleanup must finish despite cancellation. `TaskGroup::add_defer` requires a `nocancel` callback.
 
-Use `@async.handle_cancellation` only when cancellation needs explicit handling. It returns `None` on cancellation without resetting the task's cancelled state. `@async.is_cancellation_error` is deprecated and always returns `false`; `with_cancellation_handler` is replaced by `handle_cancellation`. See the [async 0.22 migration notes](https://github.com/moonbitlang/async/releases/tag/v0.22.0).
+Use `@async.handle_cancellation` only when cancellation needs explicit handling. It returns `None` on cancellation without resetting the task's cancelled state.
 
 **Closure syntax for `spawn_bg` / `spawn`:**
 
@@ -789,13 +801,13 @@ Use `@async.handle_cancellation` only when cancellation needs explicit handling.
 
 ### Async tests
 
-Use `async test` for tests that call async functions. The package containing the test must import `moonbitlang/async` for the test mode; import any async subpackages used by the test in the same `for "test"` block.
+Use `async test` for tests that call async functions. The package containing the test must import `moonbitlang/core/async` for the test mode; import any async subpackages used by the test in the same `for "test"` block.
 
 ```
 import {
-  "moonbitlang/async",
-  "moonbitlang/async/stdio",
+  "moonbitlang/core/async",
 } for "test"
+options("allow-experimental-packages": true)
 ```
 
 ```mbt nocheck
@@ -812,7 +824,7 @@ async test "sleep completes" {
 - Run `moon test` on the intended target; add `--target native` only when the
   APIs under test require native execution. Use `moon test -v` when checking
   test names or async scheduling behavior.
-- In `README.mbt.md` and docstrings, `mbt check` blocks may contain `async test` blocks; make sure the package imports `moonbitlang/async` for the relevant test mode.
+- In `README.mbt.md` and docstrings, `mbt check` blocks may contain `async test` blocks; make sure the package imports `moonbitlang/core/async` for the relevant test mode.
 
 # MoonBit Language Tour
 
@@ -837,7 +849,7 @@ MoonBit uses checked error-throwing functions, not unchecked exceptions. All err
 Checked errors are tracked in function signatures, not marked at every call site. A function that may raise declares `raise` or `raise SomeError`. If the caller only wants to pass that error upward, the caller also declares a compatible `raise` and calls the raising function normally.
 
 - Plain call inside a `raise` function: propagate automatically.
-- `fn main raise { ... }` is valid for synchronous command-line probes and small examples that should propagate errors. For async entry points, use `async fn main { ... }`; async functions can raise by default.
+- In `fn main`, call fallible APIs directly to propagate their errors.
 - In `suberror` constructors, labeled payloads use `label~ : Type`; call and pattern-match them with `label=value`.
 - `expr catch { ... }` or `try { ... } catch { ... }`: handle explicitly.
 - `try! expr`: abort if an error is raised.
@@ -853,16 +865,18 @@ suberror ValueError {
 
 ///|
 /// Tuple struct to hold position info
-struct Position(Int32, Int32) derive(ToJson, Debug, Eq)
+#derive(ToJson, Debug, Eq)
+struct Position(Int32, Int32)
 
 ///|
 /// ParseError is subtype of Error
+#derive(Eq, ToJson, Debug)
 pub(all) suberror ParseError {
   InvalidChar(pos~ : Position, Char) // pos is labeled
   InvalidEof(pos~ : Position)
   InvalidNumber(pos~ : Position, String)
   InvalidIdentEscape(pos~ : Position)
-} derive(Eq, ToJson, Debug)
+}
 
 ///|
 /// Functions declare what they can throw
@@ -1094,33 +1108,8 @@ test "string interpolation basics" {
 
 Expressions inside `\{}` must be single-line expressions.
 Nested interpolations and string literals are supported, but line breaks inside `\{}` are not.
-#### `<+` and `<?` macros for streaming interpolation
-String interpolation can be streamed directly into a `Logger`/`StringBuilder`-style writer with `<+`, or conditionally through an optional writer with `<?`:
 
-```mbt nocheck
-writer <+ "hello \{x}"
-writer <+ {"key1": value, "key2": value2}
-lhs <? "hello \{x}"
-lhs <? {"key1": value, "key2": value2}
-```
-
-This expands to calls on the writer:
-
-```mbt nocheck
-writer.write_string("hello ")
-writer.write(x)
-writer.write_object_begin()
-writer.write_object_field("key1", value)
-writer.write_object_field("key2", value2)
-writer.write_object_end()
-if lhs is Some(l) { l <+ "hello \{x}" }
-```
-
-Literal string segments use `write_string`; interpolated expressions use `write`.
-For `<?`, `None` performs no write; `Some(writer)` applies the same `<+` expansion to the wrapped writer.
-The right-hand side of `<+` and `<?` must be a template string/multiline template string or a map object literal, not an arbitrary expression.
-The expansion is macro-style: it depends on how the `writer` type implements `write_string` and `write` for template strings, plus `write_object_begin`, `write_object_field`, and `write_object_end` for map object literals. Types such as HTMLBuilder or JSONBuilder can support interpolation and streaming with the same syntax but different semantics.
-Because MoonBit allows local methods on foreign types, a package can adapt an existing writer type to this syntax by adding those local writer methods.
+Use `<+` to stream an interpolated string into a writer. For `streamed <+ "hello \{x}"` above, MoonBit calls `streamed.write_string("hello ")` followed by `streamed.write_string_interpolation(x)`. For an optional writer, unwrap it first with `if writer is Some(w) { w <+ "hello \{x}" }`.
 
 ### Multiple line strings
 
@@ -1224,10 +1213,11 @@ Use `.to_owned()` to materialize a `StringView`, `BytesView`, or `ArrayView[T]` 
 
 ```mbt check
 ///|
+#derive(Debug, ToJson)
 enum Tree[T] {
   Leaf(T) // Unlike Rust, no comma here
   Node(left~ : Tree[T], T, right~ : Tree[T]) // enum can use labels
-} derive(Debug, ToJson) // derive traits for Tree
+}
 
 ///|
 pub fn Tree::sum(tree : Tree[Int32]) -> Int32 {
@@ -1239,10 +1229,11 @@ pub fn Tree::sum(tree : Tree[Int32]) -> Int32 {
 }
 
 ///|
+#derive(Debug, ToJson)
 struct Point {
   x : Int32
   y : Int32
-} derive(Debug, ToJson) // derive traits for Point
+}
 
 ///|
 pub fn Point::Point(x~ : Int32, y~ : Int32) -> Point {
@@ -1268,10 +1259,11 @@ test "user defined types: enum and struct" {
 
 ```mbt check
 ///|
+#derive(Debug, Eq)
 pub(all) enum SearchIndex {
   Found(Int32)
   InsertionPoint(Int32)
-} derive(Debug, Eq)
+}
 
 ///|
 pub fn binary_search(arr : ArrayView[Int32], value : Int32) -> SearchIndex {
